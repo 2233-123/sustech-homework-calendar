@@ -132,3 +132,36 @@ def test_login_retries_once_on_network_error():
     cookies = cas.login("12345", "pwd", session=sess)
     assert cookies == {"JSESSIONID": "abc"}
     assert len(calls) == 3  # 第 1 次超时 + 重试后的 2 次 GET（登录页 + ticket 交换）
+
+
+def test_invalid_credentials_is_not_retried():
+    sess = FakeSession(responses=[
+        FakeResponse(200, text=LOGIN_PAGE),
+        FakeResponse(302, headers={"Location": "https://cas.sustech.edu.cn/cas/login?error=1"}),
+    ])
+    with pytest.raises(cas.InvalidCredentials):
+        cas.login("12345", "bad", session=sess)
+    assert len(sess.calls) == 2  # 仅一次 GET + 一次 POST，无重试（防止凭据重试导致账号锁定）
+
+
+def test_protocol_error_is_not_retried():
+    sess = FakeSession(responses=[FakeResponse(200, text="<html>维护中</html>")])
+    with pytest.raises(cas.NetworkError):
+        cas.login("12345", "pwd", session=sess)
+    assert len(sess.calls) == 1  # 未找到 execution → 协议错误，不重试
+
+
+def test_always_failing_session_attempts_exactly_twice():
+    class CountingRaiseSession(FakeSession):
+        def __init__(self):
+            super().__init__()
+            self.get_calls = 0
+
+        def get(self, url, **kwargs):
+            self.get_calls += 1
+            raise requests.exceptions.Timeout("boom")
+
+    sess = CountingRaiseSession()
+    with pytest.raises(cas.NetworkError):
+        cas.login("12345", "pwd", session=sess)
+    assert sess.get_calls == 2  # attempts=2：恰好两次尝试后放弃
