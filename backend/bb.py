@@ -18,7 +18,11 @@ class SessionExpired(Exception):
 
 
 class BBSession:
-    """内存会话：HTTP 层与登录函数可注入（测试用 FakeSession）。"""
+    """内存会话：HTTP 层与登录函数可注入（测试用 FakeSession）。
+
+    TODO(服务层): 跨线程共享前需加 threading.Lock——调度线程与 Flask 请求线程并发时，
+    _cookies/_obtained_at 与共享的 requests.Session 均非线程安全。
+    """
 
     def __init__(self, sid: str, password: str, *, http=None, login_fn=None,
                  clock=time.monotonic):
@@ -33,6 +37,8 @@ class BBSession:
     def _login(self) -> None:
         sess = requests.Session()
         self._cookies = self._login_fn(self._sid, self._password, session=sess)
+        if not self._cookies:
+            raise NetworkError("CAS 登录未返回有效 Cookie")
         self._obtained_at = self._clock()
 
     def _expired(self) -> bool:
@@ -65,4 +71,7 @@ class BBSession:
             raise SessionExpired(f"会话失效且重登失败：{path}")
         if r.status_code != 200:
             raise NetworkError(f"Blackboard 接口错误 HTTP {r.status_code}: {path}")
-        return r.json()
+        try:
+            return r.json()
+        except ValueError as e:
+            raise NetworkError(f"Blackboard 返回非 JSON 响应：{path}") from e
