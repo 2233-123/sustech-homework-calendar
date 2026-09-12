@@ -1,5 +1,6 @@
 import pytest
 
+from backend.bb import SessionExpired
 from backend.cas import InvalidCredentials, NetworkError
 from backend.service import (
     LOGIN_FAILED,
@@ -105,5 +106,97 @@ def test_logout_clears_session_and_optional_credentials(tmp_path, monkeypatch):
     svc.logout(clear_saved=True)
     assert svc.login_state == LOGIN_NEED
     assert svc.load_credentials() is None
+    with pytest.raises(NotAuthenticated):
+        svc.sync_now()
+
+
+def test_login_network_error_propagates(tmp_path, monkeypatch):
+    svc, db, bus = make_service(
+        tmp_path, monkeypatch,
+        session_factory=failing_session_factory(NetworkError("down")),
+    )
+    with pytest.raises(NetworkError):
+        svc.login("u", "p", remember=False)
+
+
+def test_silent_login_network_error_sets_offline_and_event(tmp_path, monkeypatch):
+    svc, db, bus = make_service(
+        tmp_path, monkeypatch,
+        session_factory=failing_session_factory(NetworkError("down")),
+    )
+    svc.save_credentials("u", "p")
+    q = bus.subscribe()
+    assert svc.try_silent_login() is False
+    assert svc.state()["offline"] is True
+    assert "offline" in q.get_nowait()
+
+
+def test_silent_login_session_expired_resets_to_need_login(tmp_path, monkeypatch):
+    svc, db, bus = make_service(
+        tmp_path, monkeypatch,
+        session_factory=failing_session_factory(SessionExpired("dead")),
+    )
+    svc.save_credentials("u", "p")
+    assert svc.try_silent_login() is False
+    assert svc.login_state == LOGIN_NEED
+
+
+def test_sync_session_expired_requires_relogin(tmp_path, monkeypatch):
+    def boom(session):
+        raise SessionExpired("dead")
+
+    svc, db, bus = make_service(tmp_path, monkeypatch, fetch_fn=boom)
+    svc.login("u", "p", remember=False)
+    with pytest.raises(SessionExpired):
+        svc.sync_now()
+    assert svc.login_state == LOGIN_NEED
+    with pytest.raises(NotAuthenticated):
+        svc.sync_now()
+
+
+def test_sync_invalid_credentials_marks_failed(tmp_path, monkeypatch):
+    def boom(session):
+        raise InvalidCredentials("bad")
+
+    svc, db, bus = make_service(tmp_path, monkeypatch, fetch_fn=boom)
+    svc.login("u", "p", remember=False)
+    with pytest.raises(InvalidCredentials):
+        svc.sync_now()
+    assert svc.login_state == LOGIN_FAILED
+
+
+def test_sync_now_empty_fetch_keeps_cache(tmp_path, monkeypatch):
+    records = [{
+        "course_id": "1", "course_name": "OS", "content_id": "2", "title": "实验1",
+        "due_at": "2026-09-20T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 100,
+    }]
+    calls = {"n": 0}
+
+    def fetch(session):
+        calls["n"] += 1
+        return records if calls["n"] == 1 else []
+
+    svc, db, bus = make_service(tmp_path, monkeypatch, fetch_fn=fetch)
+    svc.login("u", "p", remember=False)
+    svc.sync_now()
+    result = svc.sync_now()
+    assert result["removed"] == 0
+    assert len(db.list_assignments("2026-09-01T00:00:00", "2026-10-01T00:00:00")) == 1
+
+
+def test_failed_relogin_clears_previous_session(tmp_path, monkeypatch):
+    calls = {"n": 0}
+
+    class FlakyFactory(FakeBBSession):
+        def get_json(self, path, params=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return {"id": "_1_1"}
+            raise InvalidCredentials("bad")
+
+    svc, db, bus = make_service(tmp_path, monkeypatch, session_factory=FlakyFactory)
+    svc.login("u", "p", remember=False)
+    assert svc.login("u", "wrong", remember=False) is False
+    assert svc.login_state == LOGIN_FAILED
     with pytest.raises(NotAuthenticated):
         svc.sync_now()

@@ -5,6 +5,7 @@ import threading
 from datetime import datetime
 
 from backend import bb, config, dpapi
+from backend.bb import SessionExpired
 from backend.cas import InvalidCredentials, NetworkError
 
 LOGIN_OK = "ok"
@@ -71,47 +72,58 @@ class Service:
     def login(self, sid: str, password: str, remember: bool = True) -> bool:
         ok = self._login_with(sid, password)
         if ok and remember:
-            self.save_credentials(sid, password)
+            try:
+                self.save_credentials(sid, password)
+            except OSError as e:
+                self.bus.publish("error", {"code": "credential_save_failed", "message": f"凭据保存失败：{e}"})
         return ok
 
     def try_silent_login(self) -> bool:
         creds = self.load_credentials()
         if creds is None:
-            self._set_login_state(LOGIN_NEED)
+            self._set_auth_state(LOGIN_NEED, clear_session=True)
             return False
         try:
             return self._login_with(*creds)
         except NetworkError:
+            self._offline = True
             self.bus.publish("error", {"code": "offline", "message": "网络不可达，无法静默登录"})
+            return False
+        except SessionExpired:
+            self._set_auth_state(LOGIN_NEED, clear_session=True)
             return False
 
     def logout(self, clear_saved: bool = False) -> None:
-        with self._session_lock:
-            self._session = None
+        self._set_auth_state(LOGIN_NEED, clear_session=True)
         if clear_saved:
             self.clear_credentials()
-        self._set_login_state(LOGIN_NEED)
 
     def _login_with(self, sid: str, password: str) -> bool:
         session = self._session_factory(sid, password)
         try:
             bb.get_uid(session)
         except InvalidCredentials:
-            self._set_login_state(LOGIN_FAILED)
+            self._set_auth_state(LOGIN_FAILED, clear_session=True)
             return False
         with self._session_lock:
             self._session = session
-        self._set_login_state(LOGIN_OK)
+            self._login_state = LOGIN_OK
+        self.bus.publish("login_changed", {"state": LOGIN_OK})
         return True
 
-    def _set_login_state(self, state: str) -> None:
-        self._login_state = state
+    def _set_auth_state(self, state: str, *, clear_session: bool = False) -> None:
+        """在锁内原子更新（可选清空）会话与登录状态，锁外发布事件。"""
+        with self._session_lock:
+            if clear_session:
+                self._session = None
+            self._login_state = state
         self.bus.publish("login_changed", {"state": state})
 
     def _require_session(self):
         with self._session_lock:
             session = self._session
-        if session is None:
+            state = self._login_state
+        if session is None or state != LOGIN_OK:
             raise NotAuthenticated("尚未登录")
         return session
 
@@ -127,7 +139,9 @@ class Service:
             added, updated = self.db.upsert_assignments(records)
             # 顺序不可颠倒：先 upsert 再 purge——同一秒内新写入的行（synced_at >= started）不会被误删，
             # 早于本次同步的行（BB 上已删除的作业）被清理。
-            removed = self.db.purge_assignments_synced_before(started)
+            # 安全护栏：空结果无法区分「确实没有作业」与「所有课程抓取失败」，
+            # 此时跳过清理，宁可留下过期缓存，也不让提醒数据静默消失。
+            removed = 0 if not records else self.db.purge_assignments_synced_before(started)
             at = datetime.now().isoformat(timespec="seconds")
             self._last_sync = at
             self._offline = False
@@ -138,11 +152,11 @@ class Service:
             self._offline = True
             self.bus.publish("error", {"code": "offline", "message": "网络不可达"})
             raise
-        except bb.SessionExpired:
-            self._set_login_state(LOGIN_NEED)
+        except SessionExpired:
+            self._set_auth_state(LOGIN_NEED, clear_session=True)
             raise
         except InvalidCredentials:
-            self._set_login_state(LOGIN_FAILED)
+            self._set_auth_state(LOGIN_FAILED, clear_session=True)
             raise
         finally:
             self._sync_lock.release()
