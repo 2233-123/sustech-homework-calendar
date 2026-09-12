@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 node_modules/
+.omo/
 
 build/
 electron/dist/
