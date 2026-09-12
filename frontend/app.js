@@ -291,10 +291,13 @@ async function deleteSchedule() {
 // ---------- 事务概览 ----------
 function bbUrl(item) {
   if (!item.course_id) return null;
+  // DB 中 id 为 normalize_bb_id 处理后的裸 id（去 `_`/`_1`），此处还原为 BB 的 `_<id>_1` 形式
+  const cid = encodeURIComponent(String(item.course_id));
   if (item.content_id) {
-    return `https://bb.sustech.edu.cn/webapps/blackboard/content/listContent.jsp?course_id=_${item.course_id}_1&content_id=_${item.content_id}_1`;
+    const kid = encodeURIComponent(String(item.content_id));
+    return `https://bb.sustech.edu.cn/webapps/blackboard/content/listContent.jsp?course_id=_${cid}_1&content_id=_${kid}_1`;
   }
-  return `https://bb.sustech.edu.cn/webapps/blackboard/execute/courseMain?course_id=_${item.course_id}_1`;
+  return `https://bb.sustech.edu.cn/webapps/blackboard/execute/courseMain?course_id=_${cid}_1`;
 }
 
 function openExternal(url) {
@@ -327,7 +330,7 @@ function openItemOverview(kind, item) {
   } else {
     add("来源", "Blackboard");
     add("课程名", item.course_name || "—");
-    add("时间", formatDateTime(item.due_at));
+    add("截止时间", formatDateTime(item.due_at));
     add("提交状态", (item.submitted ? "已提交" : "未提交") + (item.status ? " · " + item.status : ""));
     if (item.score != null) {
       add("分数", item.possible != null ? `${item.score} / ${item.possible}` : String(item.score));
@@ -336,7 +339,7 @@ function openItemOverview(kind, item) {
     add(
       "提醒",
       state.settings.bb_remind_enabled && defaults.length
-        ? "提前 " + defaults.map((m) => formatLead(m * 60)).join("；")
+        ? "提前 " + defaults.map((m) => formatLead(m * 60)).join("、")
         : "不提醒"
     );
     add("备注", item.note || "—");
@@ -364,6 +367,7 @@ function fillSelect(sel, max) {
 
 async function openSettings() {
   $("settings-msg").textContent = "";
+  state.remindDirty = [false, false];
   try {
     const cfg = await api.getSettings();
     state.settings = cfg;
@@ -371,7 +375,6 @@ async function openSettings() {
     $("s-bb-remind").checked = !!cfg.bb_remind_enabled;
     const defs = (Array.isArray(cfg.bb_remind_defaults) ? cfg.bb_remind_defaults : []).slice(0, 2);
     state.remindLoaded = [defs[0] ?? null, defs[1] ?? null];
-    state.remindDirty = [false, false];
     const PLACEHOLDER = [1440, 120];
     const toDH = (min) => ({
       d: Math.min(30, Math.floor(min / 1440)),

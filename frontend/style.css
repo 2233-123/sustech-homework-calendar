@@ -119,7 +119,7 @@ body {
   padding: 6px 8px; border-radius: 9px; cursor: pointer;
 }
 .day-list li:hover { background: var(--accent-soft); }
-.day-list li.bb-row { cursor: default; }
+.day-list li.bb-row { cursor: pointer; }
 .day-list li.bb-row:hover { background: rgba(124, 58, 237, .07); }
 .item-time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; min-width: 42px; }
 .item-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

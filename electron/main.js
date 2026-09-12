@@ -206,8 +206,7 @@ function registerIpc() {
   ipcMain.handle("shell:open-external", (_e, url) => {
     const u = String(url || "");
     if (!/^https:\/\/bb\.sustech\.edu\.cn\//.test(u)) return false; // 仅允许 BB 域名
-    shell.openExternal(u);
-    return true;
+    return shell.openExternal(u).then(() => true, () => false);
   });
 }
 
