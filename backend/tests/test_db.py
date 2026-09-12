@@ -1,3 +1,5 @@
+import pytest
+
 from backend import db
 
 
@@ -69,3 +71,19 @@ def test_reminder_log(tmp_path):
     d.mark_fired("schedule", 1, 1800)  # 重复写入应幂等
     assert d.was_fired("schedule", 1, 1800)
     assert not d.was_fired("schedule", 1, 60)
+
+
+def test_upsert_assignments_rolls_back_on_bad_record(tmp_path):
+    d = make_db(tmp_path)
+    good = {
+        "course_id": "1", "course_name": "X", "content_id": "2", "title": "好记录",
+        "due_at": "2026-09-20T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 100,
+    }
+    bad = {"title": "缺字段"}  # 缺 course_id / content_id
+    with pytest.raises(KeyError):
+        d.upsert_assignments([good, bad])
+    # 回滚后不应有任何残留
+    assert d.list_assignments("2026-01-01T00:00:00", "2027-01-01T00:00:00") == []
+    # 后续提交也不应把半批数据带进来
+    d.set_setting("after", True)
+    assert d.list_assignments("2026-01-01T00:00:00", "2027-01-01T00:00:00") == []

@@ -116,22 +116,26 @@ class Database:
     def upsert_assignments(self, records: list) -> int:
         ts = _now()
         with self._lock:
-            for rec in records:
-                self._conn.execute(
-                    "INSERT INTO assignment"
-                    " (course_id, course_name, content_id, title, due_at, submitted, status, score, possible, synced_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?)"
-                    " ON CONFLICT(course_id, content_id) DO UPDATE SET"
-                    "   course_name=excluded.course_name, title=excluded.title, due_at=excluded.due_at,"
-                    "   submitted=excluded.submitted, status=excluded.status, score=excluded.score,"
-                    "   possible=excluded.possible, synced_at=excluded.synced_at",
-                    (
-                        rec["course_id"], rec.get("course_name"), rec["content_id"], rec["title"],
-                        rec.get("due_at"), rec.get("submitted"), rec.get("status"),
-                        rec.get("score"), rec.get("possible"), ts,
-                    ),
-                )
-            self._conn.commit()
+            try:
+                for rec in records:
+                    self._conn.execute(
+                        "INSERT INTO assignment"
+                        " (course_id, course_name, content_id, title, due_at, submitted, status, score, possible, synced_at)"
+                        " VALUES (?,?,?,?,?,?,?,?,?,?)"
+                        " ON CONFLICT(course_id, content_id) DO UPDATE SET"
+                        "   course_name=excluded.course_name, title=excluded.title, due_at=excluded.due_at,"
+                        "   submitted=excluded.submitted, status=excluded.status, score=excluded.score,"
+                        "   possible=excluded.possible, synced_at=excluded.synced_at",
+                        (
+                            rec["course_id"], rec.get("course_name"), rec["content_id"], rec["title"],
+                            rec.get("due_at"), rec.get("submitted"), rec.get("status"),
+                            rec.get("score"), rec.get("possible"), ts,
+                        ),
+                    )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
         return len(records)
 
     def list_assignments(self, start: str, end: str) -> list:
