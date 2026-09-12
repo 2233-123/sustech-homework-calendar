@@ -16,6 +16,7 @@ const state = {
   dayData: { schedules: [], assignments: [] },
   settings: {},
   remindLoaded: [null, null],
+  remindDirty: [false, false],
 };
 
 // ---------- 状态栏 ----------
@@ -304,6 +305,7 @@ async function openSettings() {
     $("s-bb-remind").checked = !!cfg.bb_remind_enabled;
     const defs = (Array.isArray(cfg.bb_remind_defaults) ? cfg.bb_remind_defaults : []).slice(0, 2);
     state.remindLoaded = [defs[0] ?? null, defs[1] ?? null];
+    state.remindDirty = [false, false];
     const PLACEHOLDER = [1440, 120];
     const toDH = (min) => ({
       d: Math.min(30, Math.floor(min / 1440)),
@@ -338,17 +340,12 @@ async function openSettings() {
 }
 
 async function saveSettings() {
-  const normToHour = (min) =>
-    Math.floor(min / 1440) * 1440 + Math.floor((min % 1440) / 60) * 60;
-  const PLACEHOLDER = [1440, 120];
   const leadOf = (i) => {
     const comp =
       Number($("s-remind" + i + "-days").value) * 1440 +
       Number($("s-remind" + i + "-hours").value) * 60;
-    const loaded = state.remindLoaded[i - 1];
-    const base = loaded ?? PLACEHOLDER[i - 1];
-    if (comp === normToHour(base)) return loaded; // 未触碰：保留原值（占位槽返回 null 表示不落库）
-    return comp; // 用户修改
+    if (!state.remindDirty[i - 1]) return state.remindLoaded[i - 1]; // 未触碰：原样保留（占位 null 不落库，越界值不被改写）
+    return comp > 0 ? comp : null; // 已触碰：以当前选择为准（0 天 0 时视为清空该槽）
   };
   const leads = [...new Set([leadOf(1), leadOf(2)].filter((v) => typeof v === "number" && v > 0))];
   const enabled = $("s-bb-remind").checked;
@@ -488,6 +485,16 @@ function bind() {
   $("btn-status-sync").addEventListener("click", () => doSync());
   $("s-bb-remind").addEventListener("change", () => {
     $("bb-remind-detail").hidden = !$("s-bb-remind").checked;
+  });
+  [
+    ["s-remind1-days", 0],
+    ["s-remind1-hours", 0],
+    ["s-remind2-days", 1],
+    ["s-remind2-hours", 1],
+  ].forEach(([id, slot]) => {
+    $(id).addEventListener("change", () => {
+      state.remindDirty[slot] = true;
+    });
   });
   $("btn-settings").addEventListener("click", openSettings);
   $("btn-login").addEventListener("click", doLogin);
