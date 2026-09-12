@@ -134,6 +134,7 @@ function createWindow(port, prefs) {
     resizable: false,
     maximizable: false,
     skipTaskbar: true,
+    hasShadow: false,
     alwaysOnTop: prefs.alwaysOnTop,
     webPreferences: {
       contextIsolation: true,
