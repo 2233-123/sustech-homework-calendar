@@ -198,14 +198,17 @@ async function doSync() {
   setStatus("同步中…");
   let failure = null;
   try {
-    await api.sync();
-  } catch (err) {
-    if (err.code !== "busy") failure = err;
+    try {
+      await api.sync();
+    } catch (err) {
+      if (err.code !== "busy") failure = err;
+    }
+    await refreshState();
+    await loadMonth();
+    await loadDay();
+  } finally {
+    $("btn-sync").disabled = false;
   }
-  await refreshState();
-  await loadMonth();
-  await loadDay();
-  $("btn-sync").disabled = false;
   if (failure) setStatus(`同步失败：${failure.message}`);
 }
 
@@ -218,7 +221,15 @@ function openScheduleForm(item) {
   $("schedule-form-title").textContent = item ? "编辑日程" : "添加日程";
   $("f-title").value = item ? item.title : "";
   $("f-all-day").checked = !!(item && item.all_day);
-  $("f-color").value = item && item.color ? item.color : "";
+  const colorSel = $("f-color");
+  const colorVal = item && item.color ? item.color : "";
+  if (colorVal && ![...colorSel.options].some((o) => o.value === colorVal)) {
+    const opt = document.createElement("option");
+    opt.value = colorVal;
+    opt.textContent = "自定义";
+    colorSel.appendChild(opt);
+  }
+  colorSel.value = colorVal;
   $("f-start").value = item ? toInputValue(item.start_at) : `${state.selected}T09:00`;
   $("f-end").value = item && item.end_at ? toInputValue(item.end_at) : "";
   const sel = $("f-remind");
