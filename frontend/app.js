@@ -301,9 +301,19 @@ async function openSettings() {
     $("s-bb-remind").checked = !!cfg.bb_remind_enabled;
     $("s-bb-defaults").value = (cfg.bb_remind_defaults || []).join(", ");
     $("s-ontop").checked = cfg.always_on_top !== false;
-    $("s-opacity").value = typeof cfg.opacity === "number" ? cfg.opacity : 0.95;
-    $("s-autostart").checked = window.hwShell ? await window.hwShell.getAutostart() : !!cfg.autostart;
-    $("s-popup").value = cfg.remind_popup || "inapp";
+    $("s-opacity").value =
+      typeof cfg.opacity === "number" ? Math.min(1, Math.max(0.3, cfg.opacity)) : 0.95;
+    let autostart = !!cfg.autostart;
+    if (window.hwShell) {
+      try {
+        autostart = await window.hwShell.getAutostart();
+      } catch {
+        /* 用配置值兜底 */
+      }
+    }
+    $("s-autostart").checked = autostart;
+    const popup = ["inapp", "toast", "both"].includes(cfg.remind_popup) ? cfg.remind_popup : "inapp";
+    $("s-popup").value = popup;
   } catch (err) {
     $("settings-msg").textContent = err.message;
   }
@@ -328,9 +338,15 @@ async function saveSettings() {
     const saved = await api.putSettings(payload);
     state.settings = saved || payload;
     if (window.hwShell) {
-      window.hwShell.setAlwaysOnTop(payload.always_on_top);
-      window.hwShell.setOpacity(payload.opacity);
-      window.hwShell.setAutostart(payload.autostart);
+      const results = await Promise.allSettled([
+        window.hwShell.setAlwaysOnTop(payload.always_on_top),
+        window.hwShell.setOpacity(payload.opacity),
+        window.hwShell.setAutostart(payload.autostart),
+      ]);
+      if (results.some((r) => r.status === "rejected")) {
+        $("settings-msg").textContent = "已保存（部分窗口设置未生效）";
+        return;
+      }
     }
     $("settings-msg").textContent = "已保存";
   } catch (err) {
