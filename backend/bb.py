@@ -54,13 +54,16 @@ class BBSession:
         url = path if path.startswith("http") else BB_BASE + path
         r = None
         for _ in range(2):
-            r = self._http.get(
-                url,
-                params=params,
-                headers={"User-Agent": cas.UA},
-                cookies=dict(self._cookies),
-                timeout=_TIMEOUT,
-            )
+            try:
+                r = self._http.get(
+                    url,
+                    params=params,
+                    headers={"User-Agent": cas.UA},
+                    cookies=dict(self._cookies),
+                    timeout=_TIMEOUT,
+                )
+            except requests.RequestException as e:
+                raise NetworkError(f"Blackboard 请求失败：{path}") from e
             if r.status_code != 401:
                 return r
             self._login()  # 401 → 强制重登后再试一次
@@ -84,10 +87,13 @@ def normalize_bb_id(bb_id: str) -> str:
 
 
 def utc_iso_to_local_iso(due_utc: str | None) -> str | None:
-    """BB 的 UTC ISO 时间 → 本地 'YYYY-MM-DDTHH:MM:SS'；空值返回 None。"""
+    """BB 的 UTC ISO 时间 → 本地 'YYYY-MM-DDTHH:MM:SS'；空值或无法解析返回 None。"""
     if not due_utc:
         return None
-    dt = datetime.fromisoformat(due_utc.replace("Z", "+00:00"))
+    try:
+        dt = datetime.fromisoformat(due_utc.replace("Z", "+00:00"))
+    except ValueError:
+        return None
     return dt.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
 
 
@@ -124,12 +130,13 @@ def get_assignment_columns(bb: "BBSession", course_id: str) -> list:
         grading = col.get("grading") or {}
         if grading.get("type") != "Attempts":
             continue
+        score_obj = col.get("score")
         out.append({
             "column_id": col.get("id", ""),
             "title": col.get("name", ""),
             "content_id": col.get("contentId") or "",
             "due_utc": grading.get("due") or "",
-            "possible": (col.get("score") or {}).get("possible"),
+            "possible": score_obj.get("possible") if isinstance(score_obj, dict) else None,
         })
     return out
 
@@ -148,7 +155,7 @@ def fetch_assignments(bb: "BBSession") -> list:
         try:
             for col in get_assignment_columns(bb, course["id"]):
                 attempts = get_attempts(bb, course["id"], col["column_id"])
-                latest = attempts[-1] if attempts else None
+                latest = max(attempts, key=lambda a: a.get("created", "")) if attempts else None
                 records.append({
                     "course_id": normalize_bb_id(course["id"]),
                     "course_name": course["name"],
@@ -160,7 +167,7 @@ def fetch_assignments(bb: "BBSession") -> list:
                     "score": (latest or {}).get("score"),
                     "possible": col["possible"],
                 })
-        except (SessionExpired, NetworkError) as e:
+        except (SessionExpired, NetworkError, KeyError, TypeError, AttributeError, ValueError) as e:
             print(f"[sync] 跳过课程 {course['id']}: {e}")
             continue
     return records

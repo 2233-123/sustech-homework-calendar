@@ -1,4 +1,5 @@
 import pytest
+import requests
 
 from backend import bb, cas
 from backend.tests.fakes import FakeResponse, FakeSession
@@ -179,3 +180,93 @@ def test_fetch_assignments_skips_failing_course():
     records = bb.fetch_assignments(s)
     assert [r["course_name"] for r in records] == ["课程B"]
     assert records[0]["submitted"] == 0
+
+
+def test_http_request_exception_maps_to_network_error():
+    class RaisingHttp(FakeSession):
+        def get(self, url, **kwargs):
+            raise requests.exceptions.Timeout("timeout")
+
+    s = make_bb(http=RaisingHttp())
+    with pytest.raises(cas.NetworkError):
+        s.get("/x")
+
+
+def test_fetch_assignments_tolerates_bad_due_date():
+    bad_columns = {
+        "results": [
+            {
+                "id": "col1",
+                "name": "实验报告",
+                "contentId": "_610795_1",
+                "score": {"possible": 100},
+                "grading": {"type": "Attempts", "due": "not-a-date"},
+            },
+        ]
+    }
+    http = FakeSession(responses=[
+        FakeResponse(200, json_data={"id": "_1_1"}),
+        FakeResponse(200, json_data={"results": [{"courseId": "_8343_1"}]}),
+        FakeResponse(200, json_data={"name": "操作系统"}),
+        FakeResponse(200, json_data=bad_columns),
+        FakeResponse(200, json_data={"results": []}),
+    ])
+    s = make_bb(http=http)
+    records = bb.fetch_assignments(s)
+    assert records[0]["due_at"] is None
+
+
+def test_fetch_assignments_tolerates_string_score():
+    weird_columns = {
+        "results": [
+            {
+                "id": "col1",
+                "name": "实验报告",
+                "contentId": "_610795_1",
+                "score": "100",
+                "grading": {"type": "Attempts", "due": "2026-03-25T15:59:00.000Z"},
+            },
+        ]
+    }
+    http = FakeSession(responses=[
+        FakeResponse(200, json_data={"id": "_1_1"}),
+        FakeResponse(200, json_data={"results": [{"courseId": "_8343_1"}]}),
+        FakeResponse(200, json_data={"name": "操作系统"}),
+        FakeResponse(200, json_data=weird_columns),
+        FakeResponse(200, json_data={"results": []}),
+    ])
+    s = make_bb(http=http)
+    records = bb.fetch_assignments(s)
+    assert records[0]["possible"] is None
+
+
+def test_fetch_assignments_skips_course_on_malformed_attempts():
+    http = FakeSession(responses=[
+        FakeResponse(200, json_data={"id": "_1_1"}),
+        FakeResponse(200, json_data={"results": [{"courseId": "_8343_1"}]}),
+        FakeResponse(200, json_data={"name": "操作系统"}),
+        FakeResponse(200, json_data=COLUMNS),
+        FakeResponse(200, json_data={"results": ["not-a-dict"]}),
+    ])
+    s = make_bb(http=http)
+    assert bb.fetch_assignments(s) == []
+
+
+def test_fetch_assignments_picks_latest_attempt():
+    out_of_order = {
+        "results": [
+            {"status": "NeedsGrading", "score": 95, "created": "2026-03-22T10:00:00.000Z"},
+            {"status": "Completed", "score": 88, "created": "2026-03-20T10:00:00.000Z"},
+        ]
+    }
+    http = FakeSession(responses=[
+        FakeResponse(200, json_data={"id": "_1_1"}),
+        FakeResponse(200, json_data={"results": [{"courseId": "_8343_1"}]}),
+        FakeResponse(200, json_data={"name": "操作系统"}),
+        FakeResponse(200, json_data=COLUMNS),
+        FakeResponse(200, json_data=out_of_order),
+    ])
+    s = make_bb(http=http)
+    records = bb.fetch_assignments(s)
+    assert records[0]["status"] == "NeedsGrading"
+    assert records[0]["score"] == 95
