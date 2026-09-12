@@ -54,6 +54,7 @@ body {
 }
 .icon-btn:hover { background: var(--accent-soft); color: var(--accent); }
 .icon-btn:disabled { opacity: 0.45; cursor: default; }
+.icon-btn.small { font-size: 12px; padding: 2px 5px; }
 
 .statusbar {
   display: flex; align-items: center; justify-content: space-between;

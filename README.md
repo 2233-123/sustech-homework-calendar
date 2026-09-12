@@ -40,7 +40,7 @@ py -3.11 -m venv .venv
 
 # 测试
 .\.venv\Scripts\python -m pytest                              # 118 用例
-node --test "frontend/tests/**/*.test.js"                     # 19 用例
+node --test "frontend/tests/**/*.test.js"                     # 21 用例
 
 # 外壳（开发态自动拉起后端）
 cd electron; npm i; npm start

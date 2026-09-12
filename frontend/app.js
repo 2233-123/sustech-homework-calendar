@@ -15,6 +15,7 @@ const state = {
   monthData: { schedules: [], assignments: [] },
   dayData: { schedules: [], assignments: [] },
   settings: {},
+  remindLoaded: [null, null],
 };
 
 // ---------- 状态栏 ----------
@@ -301,17 +302,19 @@ async function openSettings() {
     state.settings = cfg;
     $("s-interval").value = cfg.refresh_interval_min ?? 30;
     $("s-bb-remind").checked = !!cfg.bb_remind_enabled;
-    const defs = (Array.isArray(cfg.bb_remind_defaults) && cfg.bb_remind_defaults.length
-      ? cfg.bb_remind_defaults
-      : [1440, 120]
-    ).slice(0, 2);
-    const toDH = (min) => ({ d: Math.floor(min / 1440), h: Math.floor((min % 1440) / 60) });
-    const r1 = toDH(defs[0] ?? 1440);
-    const r2 = toDH(defs[1] ?? 120);
-    $("s-remind1-days").value = String(r1.d);
-    $("s-remind1-hours").value = String(r1.h);
-    $("s-remind2-days").value = String(r2.d);
-    $("s-remind2-hours").value = String(r2.h);
+    const defs = (Array.isArray(cfg.bb_remind_defaults) ? cfg.bb_remind_defaults : []).slice(0, 2);
+    state.remindLoaded = [defs[0] ?? null, defs[1] ?? null];
+    const PLACEHOLDER = [1440, 120];
+    const toDH = (min) => ({
+      d: Math.min(30, Math.floor(min / 1440)),
+      h: Math.floor((min % 1440) / 60),
+    });
+    [1, 2].forEach((i) => {
+      const base = state.remindLoaded[i - 1] ?? PLACEHOLDER[i - 1];
+      const dh = toDH(base);
+      $("s-remind" + i + "-days").value = String(dh.d);
+      $("s-remind" + i + "-hours").value = String(dh.h);
+    });
     $("bb-remind-detail").hidden = !$("s-bb-remind").checked;
     $("s-ontop").checked = cfg.always_on_top !== false;
     $("s-opacity").value =
@@ -325,8 +328,9 @@ async function openSettings() {
       }
     }
     $("s-autostart").checked = autostart;
-    const popup = ["inapp", "toast", "both"].includes(cfg.remind_popup) ? cfg.remind_popup : "inapp";
-    $("s-popup").value = popup;
+    $("s-popup").value = ["inapp", "toast", "both"].includes(cfg.remind_popup)
+      ? cfg.remind_popup
+      : "inapp";
   } catch (err) {
     $("settings-msg").textContent = err.message;
   }
@@ -334,20 +338,28 @@ async function openSettings() {
 }
 
 async function saveSettings() {
-  const lead1 = Number($("s-remind1-days").value) * 1440 + Number($("s-remind1-hours").value) * 60;
-  const lead2 = Number($("s-remind2-days").value) * 1440 + Number($("s-remind2-hours").value) * 60;
+  const normToHour = (min) =>
+    Math.floor(min / 1440) * 1440 + Math.floor((min % 1440) / 60) * 60;
+  const PLACEHOLDER = [1440, 120];
+  const leadOf = (i) => {
+    const comp =
+      Number($("s-remind" + i + "-days").value) * 1440 +
+      Number($("s-remind" + i + "-hours").value) * 60;
+    const loaded = state.remindLoaded[i - 1];
+    const base = loaded ?? PLACEHOLDER[i - 1];
+    if (comp === normToHour(base)) return loaded; // 未触碰：保留原值（占位槽返回 null 表示不落库）
+    return comp; // 用户修改
+  };
+  const leads = [...new Set([leadOf(1), leadOf(2)].filter((v) => typeof v === "number" && v > 0))];
   const enabled = $("s-bb-remind").checked;
-  if (enabled) {
-    const valid = [...new Set([lead1, lead2].filter((v) => v > 0))];
-    if (!valid.length) {
-      $("settings-msg").textContent = "请至少设置一个提醒时间";
-      return;
-    }
+  if (enabled && !leads.length) {
+    $("settings-msg").textContent = "请至少设置一个提醒时间";
+    return;
   }
   const payload = {
     refresh_interval_min: Number($("s-interval").value) || 30,
     bb_remind_enabled: enabled,
-    bb_remind_defaults: [...new Set([lead1, lead2].filter((v) => v > 0))],
+    bb_remind_defaults: leads,
     always_on_top: $("s-ontop").checked,
     opacity: Math.min(1, Math.max(0.3, Number($("s-opacity").value) || 0.95)),
     autostart: $("s-autostart").checked,
@@ -491,9 +503,9 @@ function bind() {
 
 async function init() {
   bind();
-  fillSelect($("s-remind1-days"), 7);
+  fillSelect($("s-remind1-days"), 30);
   fillSelect($("s-remind1-hours"), 23);
-  fillSelect($("s-remind2-days"), 7);
+  fillSelect($("s-remind2-days"), 30);
   fillSelect($("s-remind2-hours"), 23);
   renderMonth();
   await refreshState();
