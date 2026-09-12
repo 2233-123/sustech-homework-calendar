@@ -109,3 +109,26 @@ def test_empty_cookie_values_filtered():
         cookies={"A": "", "B": "1"},
     )
     assert cas.login("12345", "pwd", session=sess) == {"B": "1"}
+
+
+def test_login_retries_once_on_network_error():
+    calls = []
+
+    class FlakySession(FakeSession):
+        def get(self, url, **kwargs):
+            calls.append("get")
+            if len(calls) == 1:
+                raise requests.exceptions.Timeout("boom")
+            return super().get(url, **kwargs)
+
+    sess = FlakySession(
+        responses=[
+            FakeResponse(200, text=LOGIN_PAGE),
+            FakeResponse(302, headers={"Location": "https://cas.sustech.edu.cn/cas/login?ticket=ST-9"}),
+            FakeResponse(200, text="ok"),
+        ],
+        cookies={"JSESSIONID": "abc"},
+    )
+    cookies = cas.login("12345", "pwd", session=sess)
+    assert cookies == {"JSESSIONID": "abc"}
+    assert len(calls) == 3  # 第 1 次超时 + 重试后的 2 次 GET（登录页 + ticket 交换）

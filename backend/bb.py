@@ -1,6 +1,8 @@
 """Blackboard Learn 客户端：会话管理（TTL / 401 自动重登）+ REST 接口 + 作业拉取。"""
 from __future__ import annotations
 
+import logging
+import threading
 import time
 from datetime import datetime
 
@@ -8,6 +10,8 @@ import requests
 
 from backend import cas
 from backend.cas import NetworkError
+
+logger = logging.getLogger(__name__)
 
 BB_BASE = "https://bb.sustech.edu.cn"
 SESSION_TTL = 25 * 60
@@ -21,8 +25,7 @@ class SessionExpired(Exception):
 class BBSession:
     """内存会话：HTTP 层与登录函数可注入（测试用 FakeSession）。
 
-    TODO(服务层): 跨线程共享前需加 threading.Lock——调度线程与 Flask 请求线程并发时，
-    _cookies/_obtained_at 与共享的 requests.Session 均非线程安全。
+    线程安全：所有请求经实例锁串行化，可跨线程（调度线程 + Flask 线程）共享。
     """
 
     def __init__(self, sid: str, password: str, *, http=None, login_fn=None,
@@ -32,6 +35,7 @@ class BBSession:
         self._http = http if http is not None else requests.Session()
         self._login_fn = login_fn or cas.login
         self._clock = clock
+        self._lock = threading.Lock()
         self._cookies: dict = {}
         self._obtained_at = None
 
@@ -50,24 +54,25 @@ class BBSession:
             self._login()
 
     def get(self, path: str, params: dict | None = None):
-        self._ensure()
-        url = path if path.startswith("http") else BB_BASE + path
-        r = None
-        for _ in range(2):
-            try:
-                r = self._http.get(
-                    url,
-                    params=params,
-                    headers={"User-Agent": cas.UA},
-                    cookies=dict(self._cookies),
-                    timeout=_TIMEOUT,
-                )
-            except requests.RequestException as e:
-                raise NetworkError(f"Blackboard 请求失败：{path}") from e
-            if r.status_code != 401:
-                return r
-            self._login()  # 401 → 强制重登后再试一次
-        return r
+        with self._lock:
+            self._ensure()
+            url = path if path.startswith("http") else BB_BASE + path
+            r = None
+            for _ in range(2):
+                try:
+                    r = self._http.get(
+                        url,
+                        params=params,
+                        headers={"User-Agent": cas.UA},
+                        cookies=dict(self._cookies),
+                        timeout=_TIMEOUT,
+                    )
+                except requests.RequestException as e:
+                    raise NetworkError(f"Blackboard 请求失败：{path}") from e
+                if r.status_code != 401:
+                    return r
+                self._login()  # 401 → 强制重登后再试一次
+            return r
 
     def get_json(self, path: str, params: dict | None = None):
         r = self.get(path, params)
@@ -168,6 +173,6 @@ def fetch_assignments(bb: "BBSession") -> list:
                     "possible": col["possible"],
                 })
         except (SessionExpired, NetworkError, KeyError, TypeError, AttributeError, ValueError) as e:
-            print(f"[sync] 跳过课程 {course['id']}: {e}")
+            logger.warning("跳过课程 %s: %s", course["id"], e)
             continue
     return records
