@@ -14,7 +14,7 @@ from backend.app import create_app
 from backend.db import Database
 from backend.events import EventBus
 from backend.reminder import offsets_from_config, run_once
-from backend.service import Service
+from backend.service import Service, SyncInProgress
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,8 @@ def run_sync_cycle(service) -> None:
         return
     try:
         service.sync_now()
+    except SyncInProgress:
+        logger.debug("已有同步在进行，跳过本轮")
     except Exception as e:  # 后台线程不得因单次失败退出
         logger.warning("周期同步失败：%s", e)
 
@@ -47,10 +49,13 @@ def run_sync_cycle(service) -> None:
 def _sync_loop(service, stop: threading.Event, tick: float = TICK_SEC) -> None:
     last = time.monotonic()
     while not stop.wait(tick):
-        interval = max(1, int(config.load_config().get("refresh_interval_min", 30))) * 60
-        if time.monotonic() - last >= interval:
-            last = time.monotonic()
-            run_sync_cycle(service)
+        try:
+            interval = max(1, int(config.load_config().get("refresh_interval_min", 30))) * 60
+            if time.monotonic() - last >= interval:
+                last = time.monotonic()
+                run_sync_cycle(service)
+        except Exception as e:
+            logger.warning("同步循环异常：%s", e)
 
 
 def _reminder_loop(db, bus, stop: threading.Event, tick: float = REMINDER_TICK_SEC) -> None:
@@ -70,13 +75,16 @@ def main() -> int:
     bus = EventBus()
     service = Service(db, bus)
 
-    if service.try_silent_login():
-        try:
-            service.sync_now()
-        except Exception as e:
-            logger.warning("首次同步失败：%s", e)
-    else:
-        logger.info("未找到可用凭据，等待用户登录")
+    try:
+        if service.try_silent_login():
+            try:
+                service.sync_now()
+            except Exception as e:
+                logger.warning("首次同步失败：%s", e)
+        else:
+            logger.info("未找到可用凭据，等待用户登录")
+    except Exception:
+        logger.exception("启动登录流程异常，转入手动登录")
 
     stop = threading.Event()
     threading.Thread(target=_sync_loop, args=(service, stop), daemon=True, name="sync-loop").start()
@@ -85,7 +93,12 @@ def main() -> int:
     ).start()
 
     cfg = config.load_config()
-    port = int(cfg.get("port") or 0) or pick_port()
+    try:
+        port = int(cfg.get("port") or 0)
+    except (TypeError, ValueError):
+        logger.warning("配置端口非法，改用随机端口：%r", cfg.get("port"))
+        port = 0
+    port = port or pick_port()
     app = create_app(service, bus)
     print(f"PORT={port}", flush=True)
     logger.info("后端启动：http://127.0.0.1:%d", port)
