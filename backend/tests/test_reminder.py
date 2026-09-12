@@ -85,3 +85,23 @@ def test_run_once_publishes_and_is_idempotent(tmp_path):
     # 第二轮：已触发过 → 不重复
     assert reminder.run_once(d, bus, [], now=NOW) == 0
     assert q.empty()
+
+
+def test_collect_due_boundary_exactly_24h(tmp_path):
+    d = make_db(tmp_path)
+    # 触发时刻恰好 24 小时前 → 仍在补发窗口内（<=）
+    d.add_schedule(title="边界会议", start_at="2026-09-11T13:30:00", remind_before=0)
+    assert len(reminder.collect_due(d, NOW, [])) == 1
+
+
+def test_collect_due_skips_malformed_rows(tmp_path):
+    d = make_db(tmp_path)
+    d.add_schedule(title="坏数据", start_at="not-a-date", remind_before=1800)
+    d.add_schedule(title="好数据", start_at="2026-09-12T14:00:00", remind_before=1800)
+    due = reminder.collect_due(d, NOW, [])
+    assert [c["title"] for c in due] == ["好数据"]
+
+
+def test_offsets_from_config_dedupes_and_skips_invalid():
+    cfg = {"bb_remind_enabled": True, "bb_remind_defaults": [120, 120, "abc", 60]}
+    assert reminder.offsets_from_config(cfg) == [7200, 3600]
