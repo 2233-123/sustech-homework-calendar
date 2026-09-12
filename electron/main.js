@@ -1,5 +1,5 @@
 // 作业日程 — Electron 外壳主进程
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, Notification, dialog } = require("electron");
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, Notification, dialog, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -202,6 +202,12 @@ function registerIpc() {
   ipcMain.handle("shell:get-autostart", () => app.getLoginItemSettings().openAtLogin);
   ipcMain.handle("shell:notify", (_e, { title, body }) => {
     if (Notification.isSupported()) new Notification({ title, body }).show();
+  });
+  ipcMain.handle("shell:open-external", (_e, url) => {
+    const u = String(url || "");
+    if (!/^https:\/\/bb\.sustech\.edu\.cn\//.test(u)) return false; // 仅允许 BB 域名
+    shell.openExternal(u);
+    return true;
   });
 }
 

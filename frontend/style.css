@@ -191,3 +191,7 @@ body {
 .remind-label { margin-right: 4px; }
 .mini { padding: 2px 4px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; background: #fff; }
 .unit { color: var(--muted); font-size: 12px; }
+
+.item-fields { display: grid; grid-template-columns: 64px 1fr; gap: 4px 8px; margin: 8px 0; font-size: 13px; }
+.item-fields dt { color: #9aa4b2; }
+.item-fields dd { margin: 0; word-break: break-word; }

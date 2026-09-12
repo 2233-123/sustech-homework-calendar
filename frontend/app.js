@@ -2,7 +2,7 @@
 import { createApi } from "./lib/api.js";
 import { createSSE } from "./lib/sse.js";
 import { addMonths, monthGrid } from "./lib/cal.js";
-import { formatDateLabel, formatTime, toDateStr } from "./lib/fmt.js";
+import { formatDateLabel, formatDateTime, formatLead, formatTime, toDateStr } from "./lib/fmt.js";
 
 const api = createApi();
 const $ = (id) => document.getElementById(id);
@@ -15,6 +15,7 @@ const state = {
   monthData: { schedules: [], assignments: [] },
   dayData: { schedules: [], assignments: [] },
   settings: {},
+  overview: null,
   remindLoaded: [null, null],
   remindDirty: [false, false],
 };
@@ -148,7 +149,9 @@ function renderDay() {
     }
     const title = document.createElement("span");
     title.className = "item-title";
-    title.textContent = row.item.title;
+    title.textContent = row.item.course_name
+      ? `【${row.item.course_name}】${row.item.title}`
+      : row.item.title;
     if (row.item.color) {
       li.style.borderLeft = `3px solid ${row.item.color}`;
       li.style.paddingLeft = "6px";
@@ -161,9 +164,8 @@ function renderDay() {
       tag.textContent = "BB";
       tag.title = `${row.item.course_name || ""}${row.item.submitted ? " · 已提交" : ""}`;
       li.appendChild(tag);
-    } else {
-      li.addEventListener("click", () => openScheduleForm(row.item));
     }
+    li.addEventListener("click", () => openItemOverview(row.kind, row.item));
     list.appendChild(li);
   }
 }
@@ -284,6 +286,70 @@ async function deleteSchedule() {
   } catch (err) {
     $("schedule-msg").textContent = err.message;
   }
+}
+
+// ---------- 事务概览 ----------
+function bbUrl(item) {
+  if (!item.course_id) return null;
+  if (item.content_id) {
+    return `https://bb.sustech.edu.cn/webapps/blackboard/content/listContent.jsp?course_id=_${item.course_id}_1&content_id=_${item.content_id}_1`;
+  }
+  return `https://bb.sustech.edu.cn/webapps/blackboard/execute/courseMain?course_id=_${item.course_id}_1`;
+}
+
+function openExternal(url) {
+  if (window.hwShell) window.hwShell.openExternal(url);
+  else window.open(url, "_blank", "noopener");
+}
+
+function openItemOverview(kind, item) {
+  state.overview = { kind, item };
+  $("item-title").textContent = item.title;
+  const dl = $("item-fields");
+  dl.replaceChildren();
+  const add = (label, value) => {
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    dl.append(dt, dd);
+  };
+  if (kind === "schedule") {
+    add("来源", "自建");
+    if (item.all_day) {
+      add("时间", "全天");
+    } else {
+      add("开始", formatDateTime(item.start_at));
+      add("结束", item.end_at ? formatDateTime(item.end_at) : "—");
+    }
+    add("提醒", item.remind_before ? "提前 " + formatLead(item.remind_before) : "不提醒");
+    add("备注", item.note || "—");
+  } else {
+    add("来源", "Blackboard");
+    add("课程名", item.course_name || "—");
+    add("时间", formatDateTime(item.due_at));
+    add("提交状态", (item.submitted ? "已提交" : "未提交") + (item.status ? " · " + item.status : ""));
+    if (item.score != null) {
+      add("分数", item.possible != null ? `${item.score} / ${item.possible}` : String(item.score));
+    }
+    const defaults = state.settings.bb_remind_defaults || [];
+    add(
+      "提醒",
+      state.settings.bb_remind_enabled && defaults.length
+        ? "提前 " + defaults.map((m) => formatLead(m * 60)).join("；")
+        : "不提醒"
+    );
+    add("备注", item.note || "—");
+  }
+  $("btn-item-edit").hidden = kind !== "schedule";
+  $("btn-item-open-bb").hidden = kind !== "assignment" || !bbUrl(item);
+  $("btn-item-close").hidden = false;
+  $("modal-item").hidden = false;
+}
+
+function closeItemOverview() {
+  $("modal-item").hidden = true;
+  state.overview = null;
 }
 
 // ---------- 设置 ----------
@@ -497,6 +563,19 @@ function bind() {
     });
   });
   $("btn-settings").addEventListener("click", openSettings);
+  $("btn-item-close").addEventListener("click", closeItemOverview);
+  $("btn-item-edit").addEventListener("click", () => {
+    const o = state.overview;
+    if (!o) return;
+    closeItemOverview();
+    openScheduleForm(o.item);
+  });
+  $("btn-item-open-bb").addEventListener("click", () => {
+    const o = state.overview;
+    if (!o) return;
+    const u = bbUrl(o.item);
+    if (u) openExternal(u);
+  });
   $("btn-login").addEventListener("click", doLogin);
   $("schedule-form").addEventListener("submit", submitSchedule);
   $("btn-cancel-schedule").addEventListener("click", closeScheduleForm);

@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld("hwShell", {
   setAutostart: (value) => ipcRenderer.invoke("shell:set-autostart", value),
   getAutostart: () => ipcRenderer.invoke("shell:get-autostart"),
   notify: (title, body) => ipcRenderer.invoke("shell:notify", { title, body }),
+  openExternal: (url) => ipcRenderer.invoke("shell:open-external", url),
 });
