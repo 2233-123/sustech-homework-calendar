@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 node_modules/
+
+build/
+electron/dist/
+electron/resources/
