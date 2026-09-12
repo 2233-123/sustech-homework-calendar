@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 
 import requests
 
@@ -75,3 +76,91 @@ class BBSession:
             return r.json()
         except ValueError as e:
             raise NetworkError(f"Blackboard 返回非 JSON 响应：{path}") from e
+
+
+def normalize_bb_id(bb_id: str) -> str:
+    """BB 资源 ID 规范化：'_8343_1' → '8343'。"""
+    return bb_id.strip().lstrip("_").removesuffix("_1")
+
+
+def utc_iso_to_local_iso(due_utc: str | None) -> str | None:
+    """BB 的 UTC ISO 时间 → 本地 'YYYY-MM-DDTHH:MM:SS'；空值返回 None。"""
+    if not due_utc:
+        return None
+    dt = datetime.fromisoformat(due_utc.replace("Z", "+00:00"))
+    return dt.astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def get_uid(bb: "BBSession") -> str:
+    return bb.get_json("/learn/api/public/v1/users/me")["id"]
+
+
+def get_courses(bb: "BBSession") -> list:
+    """在修课程列表 → [{'id': 原始ID, 'name': 课程名}]。"""
+    uid = get_uid(bb)
+    data = bb.get_json(f"/learn/api/public/v1/users/{uid}/courses")
+    courses = []
+    for entry in data.get("results", []):
+        cid = entry.get("courseId") or ""
+        if not cid:
+            continue
+        try:
+            detail = bb.get_json(f"/learn/api/public/v1/courses/{cid}")
+            name = detail.get("name") or cid
+        except NetworkError:
+            name = cid
+        courses.append({"id": cid, "name": name})
+    return courses
+
+
+def get_assignment_columns(bb: "BBSession", course_id: str) -> list:
+    """课程的作业型评分列（grading.type == 'Attempts'，带截止时间）。"""
+    data = bb.get_json(
+        f"/learn/api/public/v1/courses/{course_id}/gradebook/columns",
+        params={"_fields": "id,name,contentId,score,grading"},
+    )
+    out = []
+    for col in data.get("results", []):
+        grading = col.get("grading") or {}
+        if grading.get("type") != "Attempts":
+            continue
+        out.append({
+            "column_id": col.get("id", ""),
+            "title": col.get("name", ""),
+            "content_id": col.get("contentId") or "",
+            "due_utc": grading.get("due") or "",
+            "possible": (col.get("score") or {}).get("possible"),
+        })
+    return out
+
+
+def get_attempts(bb: "BBSession", course_id: str, column_id: str) -> list:
+    data = bb.get_json(
+        f"/learn/api/public/v1/courses/{course_id}/gradebook/columns/{column_id}/attempts"
+    )
+    return data.get("results", [])
+
+
+def fetch_assignments(bb: "BBSession") -> list:
+    """拉取所有课程作业并归一化；单课程失败不影响其它课程。"""
+    records = []
+    for course in get_courses(bb):
+        try:
+            for col in get_assignment_columns(bb, course["id"]):
+                attempts = get_attempts(bb, course["id"], col["column_id"])
+                latest = attempts[-1] if attempts else None
+                records.append({
+                    "course_id": normalize_bb_id(course["id"]),
+                    "course_name": course["name"],
+                    "content_id": normalize_bb_id(col["content_id"] or col["column_id"]),
+                    "title": col["title"],
+                    "due_at": utc_iso_to_local_iso(col["due_utc"]),
+                    "submitted": 1 if attempts else 0,
+                    "status": (latest or {}).get("status"),
+                    "score": (latest or {}).get("score"),
+                    "possible": col["possible"],
+                })
+        except (SessionExpired, NetworkError) as e:
+            print(f"[sync] 跳过课程 {course['id']}: {e}")
+            continue
+    return records

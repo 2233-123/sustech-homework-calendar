@@ -102,3 +102,80 @@ def test_absolute_url_not_prefixed():
     s = make_bb(http=http)
     s.get("https://other.example/thing")
     assert http.calls[0][1] == "https://other.example/thing"
+
+
+# ---------- 工具函数 ----------
+
+def test_normalize_bb_id():
+    assert bb.normalize_bb_id("_8343_1") == "8343"
+    assert bb.normalize_bb_id("_610795_1") == "610795"
+    assert bb.normalize_bb_id("8343") == "8343"
+
+
+def test_utc_iso_to_local_iso_preserves_instant():
+    from datetime import datetime, timezone
+
+    out = bb.utc_iso_to_local_iso("2026-03-25T15:59:00.000Z")
+    dt_local = datetime.fromisoformat(out)
+    dt_utc = datetime(2026, 3, 25, 15, 59, tzinfo=timezone.utc)
+    assert dt_local.astimezone() == dt_utc
+
+
+def test_utc_iso_to_local_iso_empty():
+    assert bb.utc_iso_to_local_iso("") is None
+    assert bb.utc_iso_to_local_iso(None) is None
+
+
+# ---------- 作业拉取 ----------
+
+COLUMNS = {
+    "results": [
+        {
+            "id": "col1",
+            "name": "实验报告",
+            "contentId": "_610795_1",
+            "score": {"possible": 100},
+            "grading": {"type": "Attempts", "due": "2026-03-25T15:59:00.000Z"},
+        },
+        {"id": "col2", "name": "期中考试", "grading": {"type": "Numeric"}},
+    ]
+}
+
+
+def test_fetch_assignments_parses_and_filters():
+    http = FakeSession(responses=[
+        FakeResponse(200, json_data={"id": "_1_1"}),                                     # users/me
+        FakeResponse(200, json_data={"results": [{"courseId": "_8343_1"}]}),             # enrollments
+        FakeResponse(200, json_data={"name": "操作系统"}),                                # course detail
+        FakeResponse(200, json_data=COLUMNS),                                             # columns
+        FakeResponse(200, json_data={"results": [{"status": "Completed", "score": 95}]}), # attempts
+    ])
+    s = make_bb(http=http)
+    records = bb.fetch_assignments(s)
+    assert len(records) == 1
+    rec = records[0]
+    assert rec["course_id"] == "8343"
+    assert rec["course_name"] == "操作系统"
+    assert rec["content_id"] == "610795"
+    assert rec["title"] == "实验报告"
+    assert rec["submitted"] == 1
+    assert rec["status"] == "Completed"
+    assert rec["score"] == 95
+    assert rec["possible"] == 100
+    assert rec["due_at"] is not None
+
+
+def test_fetch_assignments_skips_failing_course():
+    http = FakeSession(responses=[
+        FakeResponse(200, json_data={"id": "_1_1"}),                                     # users/me
+        FakeResponse(200, json_data={"results": [{"courseId": "_A_1"}, {"courseId": "_B_1"}]}),
+        FakeResponse(200, json_data={"name": "课程A"}),                                   # A detail
+        FakeResponse(200, json_data={"name": "课程B"}),                                   # B detail
+        FakeResponse(500),                                                                # A 的 columns 失败
+        FakeResponse(200, json_data=COLUMNS),                                             # B 的 columns
+        FakeResponse(200, json_data={"results": []}),                                     # B 的 attempts
+    ])
+    s = make_bb(http=http)
+    records = bb.fetch_assignments(s)
+    assert [r["course_name"] for r in records] == ["课程B"]
+    assert records[0]["submitted"] == 0
