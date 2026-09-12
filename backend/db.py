@@ -124,7 +124,8 @@ class Database:
                 }
                 added = 0
                 for rec in records:
-                    if (rec["course_id"], rec["content_id"]) not in existing:
+                    key = (rec["course_id"], rec["content_id"])
+                    if key not in existing:
                         added += 1
                     self._conn.execute(
                         "INSERT INTO assignment"
@@ -140,6 +141,7 @@ class Database:
                             rec.get("score"), rec.get("possible"), ts,
                         ),
                     )
+                    existing.add(key)
                 self._conn.commit()
             except Exception:
                 self._conn.rollback()

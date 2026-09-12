@@ -140,3 +140,24 @@ def test_list_reminder_assignments_filters_due(tmp_path):
     ])
     rows = d.list_reminder_assignments()
     assert [r["title"] for r in rows] == ["有截止"]
+
+
+def test_purge_assignments_boundary_keeps_same_second_rows(tmp_path):
+    d = make_db(tmp_path)
+    d.upsert_assignments([{
+        "course_id": "1", "course_name": "X", "content_id": "2", "title": "同步中的作业",
+        "due_at": "2026-09-20T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 100,
+    }])
+    synced = d.list_assignments("2020-01-01T00:00:00", "2030-01-01T00:00:00")[0]["synced_at"]
+    # synced_at == ts 必须保留（同一秒内的同步不得误删刚写入的行）
+    assert d.purge_assignments_synced_before(synced) == 0
+    assert len(d.list_assignments("2020-01-01T00:00:00", "2030-01-01T00:00:00")) == 1
+
+
+def test_upsert_assignments_counts_duplicate_keys_once(tmp_path):
+    d = make_db(tmp_path)
+    rec = {
+        "course_id": "1", "course_name": "X", "content_id": "2", "title": "作业A",
+        "due_at": "2026-09-20T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 100,
+    }
+    assert d.upsert_assignments([rec, dict(rec)]) == (1, 1)
