@@ -1,5 +1,8 @@
 {
   "name": "hw-calendar-frontend",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\""
+  }
 }

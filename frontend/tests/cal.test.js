@@ -24,3 +24,15 @@ test("monthGrid 标记 inMonth 与 isToday", () => {
   assert.equal(flat.find((c) => c.isToday).date, "2026-09-12");
   assert.equal(flat.find((c) => c.date === "2026-09-12").inMonth, true);
 });
+
+test("monthGrid 边界：二月天数、周一/周日起始、跨年尾部", () => {
+  assert.equal(monthGrid(2023, 2, "2023-02-01").flat().filter((c) => c.inMonth).length, 28);
+  assert.equal(monthGrid(2024, 2, "2024-02-01").flat().filter((c) => c.inMonth).length, 29);
+  const mondayStart = monthGrid(2027, 2, "2027-02-01"); // 2027-02-01 为周一
+  assert.equal(mondayStart[0][0].date, "2027-02-01");
+  const sundayStart = monthGrid(2026, 11, "2026-11-01"); // 2026-11-01 为周日
+  assert.equal(sundayStart[0][0].date, "2026-10-26");
+  const tail = monthGrid(2026, 12, "2026-12-01").flat().filter((c) => c.date.startsWith("2027-01"));
+  assert.ok(tail.length > 0);
+  assert.ok(tail.every((c) => !c.inMonth));
+});

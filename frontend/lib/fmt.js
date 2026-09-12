@@ -18,6 +18,7 @@ export function parseLocal(iso) {
 }
 
 export function formatTime(iso) {
+  if (!iso) return "";
   const d = parseLocal(iso);
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }

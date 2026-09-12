@@ -32,3 +32,10 @@ test("formatDateLabel 中文标签（周一起算）", () => {
   assert.equal(formatDateLabel("2026-09-12"), "9 月 12 日 周六");
   assert.equal(formatDateLabel("2026-09-14"), "9 月 14 日 周一");
 });
+
+test("formatDateLabel 周日与无效输入策略", () => {
+  assert.equal(formatDateLabel("2026-09-13"), "9 月 13 日 周日");
+  assert.equal(formatTime(null), "");
+  assert.equal(formatTime(""), "");
+  assert.ok(Number.isNaN(parseLocal("x").getTime()));
+});
