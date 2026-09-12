@@ -1,0 +1,22 @@
+{
+  "name": "hw-calendar-shell",
+  "private": true,
+  "version": "0.1.0",
+  "description": "作业日程桌面小组件外壳",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "build": {
+    "appId": "com.hwcal.shell",
+    "productName": "作业日程",
+    "files": ["main.js", "preload.js", "tray.png"],
+    "extraResources": [{ "from": "resources/backend", "to": "backend" }],
+    "win": { "target": ["nsis", "portable"], "icon": "icon.png" }
+  },
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
+  }
+}
