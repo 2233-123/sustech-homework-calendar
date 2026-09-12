@@ -186,14 +186,16 @@ async function doLogin() {
 }
 
 async function doSync() {
+  let failure = null;
   try {
     await api.sync();
   } catch (err) {
-    if (err.code !== "busy") setStatus(`同步失败：${err.message}`);
+    if (err.code !== "busy") failure = err;
   }
   await refreshState();
   await loadMonth();
   await loadDay();
+  if (failure) setStatus(`同步失败：${failure.message}`);
 }
 
 // ---------- 日程表单 ----------
@@ -375,8 +377,8 @@ function bind() {
     const now = new Date();
     state.year = now.getFullYear();
     state.month = now.getMonth() + 1;
-    renderMonth();
     selectDate(toDateStr(now));
+    loadMonth();
   });
   $("btn-add").addEventListener("click", () => openScheduleForm(null));
   $("btn-sync").addEventListener("click", () => doSync());
