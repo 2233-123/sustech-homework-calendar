@@ -27,9 +27,11 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
 
     @app.post("/api/auth/login")
     def api_login():
-        body = request.get_json(silent=True) or {}
-        sid = str(body.get("sid", "")).strip()
-        password = str(body.get("password", ""))
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return _error("bad_request", "请求体应为 JSON 对象", 400)
+        sid = str(body.get("sid") or "").strip()
+        password = str(body.get("password") or "")
         remember = bool(body.get("remember", False))
         if not sid or not password:
             return _error("bad_request", "缺少 sid 或 password", 400)
@@ -37,14 +39,18 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
             ok = service.login(sid, password, remember=remember)
         except NetworkError as e:
             return _error("offline", str(e), 502)
+        except SessionExpired:
+            return _error("session_expired", "会话失效，请重新登录", 401)
         if not ok:
             return _error("invalid_credentials", "账号或密码错误", 401)
         return jsonify({"ok": True, "state": service.state()})
 
     @app.post("/api/auth/logout")
     def api_logout():
-        body = request.get_json(silent=True) or {}
-        service.logout(clear_saved=bool(body.get("clear_credentials", False)))
+        body = request.get_json(silent=True)
+        if body is not None and not isinstance(body, dict):
+            return _error("bad_request", "请求体应为 JSON 对象", 400)
+        service.logout(clear_saved=bool((body or {}).get("clear_credentials", False)))
         return jsonify({"ok": True, "state": service.state()})
 
     @app.post("/api/sync")
@@ -70,9 +76,9 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
             year = int(request.args.get("year", today.year))
             month = int(request.args.get("month", today.month))
             start = date(year, month, 1)
-        except ValueError:
+            end = date(year + (month == 12), month % 12 + 1, 1)
+        except (ValueError, OverflowError):
             return _error("bad_request", "year/month 非法", 400)
-        end = date(year + (month == 12), month % 12 + 1, 1)
         start_s = f"{start.isoformat()}T00:00:00"
         end_s = f"{end.isoformat()}T00:00:00"
         # 注意：无截止时间的作业（due_at IS NULL）不会出现在日历上——有意设计（日历按日期键控）
@@ -86,10 +92,11 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
         raw = request.args.get("date") or date.today().isoformat()
         try:
             day = date.fromisoformat(raw)
-        except ValueError:
+            nxt = day + timedelta(days=1)
+        except (ValueError, OverflowError):
             return _error("bad_request", "date 格式应为 YYYY-MM-DD", 400)
         start_s = f"{day.isoformat()}T00:00:00"
-        end_s = f"{(day + timedelta(days=1)).isoformat()}T00:00:00"
+        end_s = f"{nxt.isoformat()}T00:00:00"
         return jsonify({
             "schedules": service.db.list_schedules(start_s, end_s),
             "assignments": service.db.list_assignments(start_s, end_s),
@@ -97,12 +104,13 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
 
     @app.post("/api/schedule")
     def api_schedule_create():
-        body = request.get_json(silent=True) or {}
-        title = str(body.get("title", "")).strip()
-        start_at = str(body.get("start_at", ""))
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return _error("bad_request", "请求体应为 JSON 对象", 400)
+        title = str(body.get("title") or "").strip()
+        start_at = str(body.get("start_at") or "")
         if not title or not start_at:
             return _error("bad_request", "缺少 title 或 start_at", 400)
-        # ★ 写入校验：时间格式合法，保证提醒调度可解析
         try:
             datetime.strptime(start_at, "%Y-%m-%dT%H:%M:%S")
         except ValueError:
@@ -113,11 +121,15 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
                 remind_before = int(remind_before)
             except (TypeError, ValueError):
                 return _error("bad_request", "remind_before 应为整数秒", 400)
+        try:
+            all_day = int(body.get("all_day") or 0)
+        except (TypeError, ValueError):
+            return _error("bad_request", "all_day 应为 0/1", 400)
         sid = service.db.add_schedule(
             title=title,
             start_at=start_at,
             end_at=body.get("end_at"),
-            all_day=int(body.get("all_day", 0)),
+            all_day=all_day,
             remind_before=remind_before,
             note=body.get("note"),
             color=body.get("color"),
@@ -128,13 +140,29 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
     def api_schedule_update(sid):
         if service.db.get_schedule(sid) is None:
             return _error("not_found", "日程不存在", 404)
-        body = request.get_json(silent=True) or {}
-        # ★ 写入校验：仅当更新 start_at 时校验其格式
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return _error("bad_request", "请求体应为 JSON 对象", 400)
+        if "title" in body:
+            title = str(body["title"] or "").strip()
+            if not title:
+                return _error("bad_request", "title 不能为空", 400)
+            body["title"] = title
         if "start_at" in body:
             try:
                 datetime.strptime(str(body["start_at"]), "%Y-%m-%dT%H:%M:%S")
             except ValueError:
                 return _error("bad_request", "start_at 格式应为 YYYY-MM-DDTHH:MM:SS", 400)
+        if "all_day" in body:
+            try:
+                body["all_day"] = int(body["all_day"] or 0)
+            except (TypeError, ValueError):
+                return _error("bad_request", "all_day 应为 0/1", 400)
+        if "remind_before" in body and body["remind_before"] is not None:
+            try:
+                body["remind_before"] = int(body["remind_before"])
+            except (TypeError, ValueError):
+                return _error("bad_request", "remind_before 应为整数秒", 400)
         service.db.update_schedule(sid, **body)
         return jsonify({"ok": True})
 
@@ -151,9 +179,11 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
 
     @app.put("/api/settings")
     def api_settings_put():
-        body = request.get_json(silent=True) or {}
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return _error("bad_request", "请求体应为 JSON 对象", 400)
         cfg = config.load_config()
-        cfg.update(body if isinstance(body, dict) else {})
+        cfg.update(body)
         config.save_config(cfg)
         return jsonify(config.load_config())
 

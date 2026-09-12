@@ -1,4 +1,5 @@
 from backend.app import create_app
+from backend.bb import SessionExpired
 from backend.cas import InvalidCredentials
 from backend.tests.service_fakes import failing_session_factory, make_service
 
@@ -140,3 +141,52 @@ def test_schedule_update_rejects_bad_start_at(tmp_path, monkeypatch):
     rv = client.put(f"/api/schedule/{sid}", json={"start_at": "oops"})
     assert rv.status_code == 400
     assert rv.get_json()["error"] == "bad_request"
+
+
+def test_schedule_create_rejects_bad_all_day(tmp_path, monkeypatch):
+    client, svc, db, bus = make_client(tmp_path, monkeypatch)
+    rv = client.post("/api/schedule", json={
+        "title": "x", "start_at": "2026-09-12T10:00:00", "all_day": "abc",
+    })
+    assert rv.status_code == 400
+    rv = client.post("/api/schedule", json={
+        "title": "x", "start_at": "2026-09-12T10:00:00", "all_day": None,
+    })
+    assert rv.status_code == 201
+
+
+def test_non_dict_body_returns_400(tmp_path, monkeypatch):
+    client, svc, db, bus = make_client(tmp_path, monkeypatch)
+    assert client.post("/api/schedule", json=[1, 2, 3]).status_code == 400
+    assert client.post("/api/auth/login", json=42).status_code == 400
+    assert client.put("/api/settings", json=["x"]).status_code == 400
+
+
+def test_login_endpoint_session_expired(tmp_path, monkeypatch):
+    client, svc, db, bus = make_client(
+        tmp_path, monkeypatch,
+        session_factory=failing_session_factory(SessionExpired("dead")),
+    )
+    rv = client.post("/api/auth/login", json={"sid": "u", "password": "p"})
+    assert rv.status_code == 401
+    assert rv.get_json()["error"] == "session_expired"
+
+
+def test_calendar_and_day_overflow_bounds(tmp_path, monkeypatch):
+    client, svc, db, bus = make_client(tmp_path, monkeypatch)
+    assert client.get("/api/calendar?year=9999&month=12").status_code == 400
+    assert client.get("/api/day?date=9999-12-31").status_code == 400
+
+
+def test_schedule_update_validates_and_coerces(tmp_path, monkeypatch):
+    client, svc, db, bus = make_client(tmp_path, monkeypatch)
+    rv = client.post("/api/schedule", json={"title": "x", "start_at": "2026-09-12T10:00:00"})
+    sid = rv.get_json()["id"]
+    assert client.put(f"/api/schedule/{sid}", json={"title": None}).status_code == 400
+    assert client.put(f"/api/schedule/{sid}", json={"all_day": "abc"}).status_code == 400
+    rv = client.put(f"/api/schedule/{sid}", json={"all_day": "1", "remind_before": "600"})
+    assert rv.status_code == 200
+    rows = client.get("/api/day?date=2026-09-12").get_json()["schedules"]
+    row = [s for s in rows if s["id"] == sid][0]
+    assert row["all_day"] == 1
+    assert row["remind_before"] == 600
