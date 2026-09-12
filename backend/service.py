@@ -71,6 +71,8 @@ class Service:
 
     def login(self, sid: str, password: str, remember: bool = True) -> bool:
         ok = self._login_with(sid, password)
+        if ok:
+            self._offline = False
         if ok and remember:
             try:
                 self.save_credentials(sid, password)

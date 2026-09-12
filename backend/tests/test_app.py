@@ -121,7 +121,6 @@ def test_root_placeholder(tmp_path, monkeypatch):
     assert "后端运行中" in rv.get_data(as_text=True)
 
 
-# ★ 补充（质量评审裁决）：写入路径校验
 def test_schedule_create_rejects_invalid_fields(tmp_path, monkeypatch):
     client, svc, db, bus = make_client(tmp_path, monkeypatch)
     rv = client.post("/api/schedule", json={"title": "x", "start_at": "not-a-date"})
@@ -190,3 +189,22 @@ def test_schedule_update_validates_and_coerces(tmp_path, monkeypatch):
     row = [s for s in rows if s["id"] == sid][0]
     assert row["all_day"] == 1
     assert row["remind_before"] == 600
+
+
+def test_schedule_fields_must_be_strings(tmp_path, monkeypatch):
+    client, svc, db, bus = make_client(tmp_path, monkeypatch)
+    rv = client.post("/api/schedule", json={
+        "title": "x", "start_at": "2026-09-12T10:00:00", "note": {"a": 1},
+    })
+    assert rv.status_code == 400
+    assert rv.get_json()["error"] == "bad_request"
+    rv = client.post("/api/schedule", json={
+        "title": "x", "start_at": "2026-09-12T10:00:00", "end_at": 123,
+    })
+    assert rv.status_code == 400
+    rv = client.post("/api/schedule", json={
+        "title": "x", "start_at": "2026-09-12T10:00:00", "note": "备注", "color": "#fff",
+    })
+    assert rv.status_code == 201
+    sid = rv.get_json()["id"]
+    assert client.put(f"/api/schedule/{sid}", json={"color": 5}).status_code == 400

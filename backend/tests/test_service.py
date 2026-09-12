@@ -200,3 +200,21 @@ def test_failed_relogin_clears_previous_session(tmp_path, monkeypatch):
     assert svc.login_state == LOGIN_FAILED
     with pytest.raises(NotAuthenticated):
         svc.sync_now()
+
+
+def test_login_success_clears_offline_flag(tmp_path, monkeypatch):
+    calls = {"n": 0}
+
+    class FlakyFactory(FakeBBSession):
+        def get_json(self, path, params=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise NetworkError("down")
+            return {"id": "_1_1"}
+
+    svc, db, bus = make_service(tmp_path, monkeypatch, session_factory=FlakyFactory)
+    svc.save_credentials("u", "p")
+    assert svc.try_silent_login() is False
+    assert svc.state()["offline"] is True
+    assert svc.login("u", "p", remember=False) is True
+    assert svc.state()["offline"] is False

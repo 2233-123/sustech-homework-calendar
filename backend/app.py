@@ -1,7 +1,7 @@
 """Flask 应用：REST API + SSE + 静态托管（设计文档 §6.5）。"""
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta  # ★ 增加 datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, stream_with_context
@@ -121,6 +121,10 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
                 remind_before = int(remind_before)
             except (TypeError, ValueError):
                 return _error("bad_request", "remind_before 应为整数秒", 400)
+        for field in ("end_at", "note", "color"):
+            value = body.get(field)
+            if value is not None and not isinstance(value, str):
+                return _error("bad_request", f"{field} 应为字符串", 400)
         try:
             all_day = int(body.get("all_day") or 0)
         except (TypeError, ValueError):
@@ -153,6 +157,9 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
                 datetime.strptime(str(body["start_at"]), "%Y-%m-%dT%H:%M:%S")
             except ValueError:
                 return _error("bad_request", "start_at 格式应为 YYYY-MM-DDTHH:MM:SS", 400)
+        for field in ("end_at", "note", "color"):
+            if field in body and body[field] is not None and not isinstance(body[field], str):
+                return _error("bad_request", f"{field} 应为字符串", 400)
         if "all_day" in body:
             try:
                 body["all_day"] = int(body["all_day"] or 0)
