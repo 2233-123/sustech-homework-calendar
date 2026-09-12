@@ -27,3 +27,20 @@ export function formatDateLabel(dateStr) {
   const d = parseLocal(dateStr);
   return `${d.getMonth() + 1} 月 ${d.getDate()} 日 周${WEEKDAYS[(d.getDay() + 6) % 7]}`;
 }
+
+export function formatLead(seconds) {
+  const s = Number(seconds);
+  if (!Number.isFinite(s) || s <= 0) return "";
+  const days = Math.floor(s / 86400);
+  const hours = Math.floor((s % 86400) / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
+  if (days > 0) return `${days} 天${hours > 0 ? ` ${hours} 小时` : ""}`;
+  if (hours > 0) return `${hours} 小时${minutes > 0 ? ` ${minutes} 分钟` : ""}`;
+  return `${minutes} 分钟`;
+}
+
+export function formatDateTime(iso) {
+  if (!iso) return "";
+  const d = parseLocal(iso);
+  return `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}

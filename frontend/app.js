@@ -19,14 +19,7 @@ const state = {
 
 // ---------- 状态栏 ----------
 function setStatus(text) {
-  const el = $("statusbar");
-  if (!text) {
-    el.hidden = true;
-    el.textContent = "";
-    return;
-  }
-  el.hidden = false;
-  el.textContent = text;
+  $("status-text").textContent = text || "尚未同步";
 }
 
 async function refreshState() {
@@ -195,7 +188,7 @@ async function doLogin() {
 }
 
 async function doSync() {
-  $("btn-sync").disabled = true;
+  $("btn-status-sync").disabled = true;
   setStatus("同步中…");
   let failure = null;
   try {
@@ -208,7 +201,7 @@ async function doSync() {
     await loadMonth();
     await loadDay();
   } finally {
-    $("btn-sync").disabled = false;
+    $("btn-status-sync").disabled = false;
   }
   if (failure) setStatus(`同步失败：${failure.message}`);
 }
@@ -292,6 +285,15 @@ async function deleteSchedule() {
 }
 
 // ---------- 设置 ----------
+function fillSelect(sel, max) {
+  for (let i = 0; i <= max; i++) {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = String(i);
+    sel.appendChild(opt);
+  }
+}
+
 async function openSettings() {
   $("settings-msg").textContent = "";
   try {
@@ -299,7 +301,18 @@ async function openSettings() {
     state.settings = cfg;
     $("s-interval").value = cfg.refresh_interval_min ?? 30;
     $("s-bb-remind").checked = !!cfg.bb_remind_enabled;
-    $("s-bb-defaults").value = (cfg.bb_remind_defaults || []).join(", ");
+    const defs = (Array.isArray(cfg.bb_remind_defaults) && cfg.bb_remind_defaults.length
+      ? cfg.bb_remind_defaults
+      : [1440, 120]
+    ).slice(0, 2);
+    const toDH = (min) => ({ d: Math.floor(min / 1440), h: Math.floor((min % 1440) / 60) });
+    const r1 = toDH(defs[0] ?? 1440);
+    const r2 = toDH(defs[1] ?? 120);
+    $("s-remind1-days").value = String(r1.d);
+    $("s-remind1-hours").value = String(r1.h);
+    $("s-remind2-days").value = String(r2.d);
+    $("s-remind2-hours").value = String(r2.h);
+    $("bb-remind-detail").hidden = !$("s-bb-remind").checked;
     $("s-ontop").checked = cfg.always_on_top !== false;
     $("s-opacity").value =
       typeof cfg.opacity === "number" ? Math.min(1, Math.max(0.3, cfg.opacity)) : 0.95;
@@ -321,14 +334,20 @@ async function openSettings() {
 }
 
 async function saveSettings() {
-  const defaults = $("s-bb-defaults").value
-    .split(",")
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isFinite(n) && n > 0);
+  const lead1 = Number($("s-remind1-days").value) * 1440 + Number($("s-remind1-hours").value) * 60;
+  const lead2 = Number($("s-remind2-days").value) * 1440 + Number($("s-remind2-hours").value) * 60;
+  const enabled = $("s-bb-remind").checked;
+  if (enabled) {
+    const valid = [...new Set([lead1, lead2].filter((v) => v > 0))];
+    if (!valid.length) {
+      $("settings-msg").textContent = "请至少设置一个提醒时间";
+      return;
+    }
+  }
   const payload = {
     refresh_interval_min: Number($("s-interval").value) || 30,
-    bb_remind_enabled: $("s-bb-remind").checked,
-    bb_remind_defaults: defaults,
+    bb_remind_enabled: enabled,
+    bb_remind_defaults: [...new Set([lead1, lead2].filter((v) => v > 0))],
     always_on_top: $("s-ontop").checked,
     opacity: Math.min(1, Math.max(0.3, Number($("s-opacity").value) || 0.95)),
     autostart: $("s-autostart").checked,
@@ -454,7 +473,10 @@ function bind() {
     loadMonth();
   });
   $("btn-add").addEventListener("click", () => openScheduleForm(null));
-  $("btn-sync").addEventListener("click", () => doSync());
+  $("btn-status-sync").addEventListener("click", () => doSync());
+  $("s-bb-remind").addEventListener("change", () => {
+    $("bb-remind-detail").hidden = !$("s-bb-remind").checked;
+  });
   $("btn-settings").addEventListener("click", openSettings);
   $("btn-login").addEventListener("click", doLogin);
   $("schedule-form").addEventListener("submit", submitSchedule);
@@ -469,6 +491,10 @@ function bind() {
 
 async function init() {
   bind();
+  fillSelect($("s-remind1-days"), 7);
+  fillSelect($("s-remind1-hours"), 23);
+  fillSelect($("s-remind2-days"), 7);
+  fillSelect($("s-remind2-hours"), 23);
   renderMonth();
   await refreshState();
   await loadMonth();

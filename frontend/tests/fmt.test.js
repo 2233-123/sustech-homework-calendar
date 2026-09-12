@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { formatDateLabel, formatTime, parseLocal, toDateStr } from "../lib/fmt.js";
+import { formatDateLabel, formatDateTime, formatLead, formatTime, parseLocal, toDateStr } from "../lib/fmt.js";
 
 test("toDateStr 补零格式", () => {
   assert.equal(toDateStr(new Date(2026, 8, 12)), "2026-09-12");
@@ -38,4 +38,18 @@ test("formatDateLabel 周日与无效输入策略", () => {
   assert.equal(formatTime(null), "");
   assert.equal(formatTime(""), "");
   assert.ok(Number.isNaN(parseLocal("x").getTime()));
+});
+
+test("formatLead 可读化提前时间", () => {
+  assert.equal(formatLead(1800), "30 分钟");
+  assert.equal(formatLead(7200), "2 小时");
+  assert.equal(formatLead(86400), "1 天");
+  assert.equal(formatLead(93600), "1 天 2 小时");
+  assert.equal(formatLead(5400), "1 小时 30 分钟");
+  assert.equal(formatLead(0), "");
+});
+
+test("formatDateTime 月日时分", () => {
+  assert.equal(formatDateTime("2026-09-13T09:00:00"), "9 月 13 日 09:00");
+  assert.equal(formatDateTime(""), "");
 });

@@ -11,12 +11,14 @@
     <header class="titlebar" id="titlebar">
       <span class="brand">作业日程</span>
       <span class="titlebar-actions">
-        <button id="btn-sync" class="icon-btn" title="立即同步">⟳</button>
         <button id="btn-settings" class="icon-btn" title="设置">⚙</button>
       </span>
     </header>
 
-    <div id="statusbar" class="statusbar" hidden></div>
+    <div id="statusbar" class="statusbar">
+      <span id="status-text">尚未同步</span>
+      <button id="btn-status-sync" class="icon-btn small" title="立即同步">⟳</button>
+    </div>
 
     <section id="login-card" class="card login-card" hidden>
       <h2>登录 SUSTech CAS</h2>
@@ -111,40 +113,63 @@
     <div id="modal-settings" class="modal" hidden>
       <div class="modal-card">
         <h3>设置</h3>
-        <label class="field">同步间隔（分钟）
-          <input id="s-interval" type="number" min="1" />
-        </label>
-        <label class="check">
-          <input id="s-bb-remind" type="checkbox" />
-          BB 作业截止提醒
-        </label>
-        <label class="field">BB 提醒（分钟，逗号分隔）
-          <input id="s-bb-defaults" type="text" />
-        </label>
-        <label class="check">
-          <input id="s-ontop" type="checkbox" />
-          窗口置顶
-        </label>
-        <label class="field">窗口透明度（0.3 – 1.0）
-          <input id="s-opacity" type="number" min="0.3" max="1" step="0.05" />
-        </label>
-        <label class="check">
-          <input id="s-autostart" type="checkbox" />
-          开机自启
-        </label>
-        <label class="field">提醒形式
-          <select id="s-popup">
-            <option value="inapp">应用内气泡</option>
-            <option value="toast">系统通知</option>
-            <option value="both">两者都要</option>
-          </select>
-        </label>
+        <section class="settings-group">
+          <h4>BB 日程设置</h4>
+          <label class="field">同步间隔（分钟）
+            <input id="s-interval" type="number" min="1" />
+          </label>
+          <label class="check">
+            <input id="s-bb-remind" type="checkbox" />
+            开启 BB 作业截止提醒
+          </label>
+          <div id="bb-remind-detail" class="sub-block" hidden>
+            <div class="remind-row">
+              <span class="remind-label">提醒 1 · 截止前</span>
+              <select id="s-remind1-days" class="mini"></select><span class="unit">天</span>
+              <select id="s-remind1-hours" class="mini"></select><span class="unit">小时</span>
+            </div>
+            <div class="remind-row">
+              <span class="remind-label">提醒 2 · 截止前</span>
+              <select id="s-remind2-days" class="mini"></select><span class="unit">天</span>
+              <select id="s-remind2-hours" class="mini"></select><span class="unit">小时</span>
+            </div>
+          </div>
+        </section>
+        <section class="settings-group">
+          <h4>提醒</h4>
+          <label class="field">提醒形式
+            <select id="s-popup">
+              <option value="inapp">应用内气泡</option>
+              <option value="toast">系统通知</option>
+              <option value="both">两者都要</option>
+            </select>
+          </label>
+        </section>
+        <section class="settings-group">
+          <h4>窗口</h4>
+          <label class="check">
+            <input id="s-ontop" type="checkbox" />
+            窗口置顶
+          </label>
+          <label class="field">窗口透明度（0.3 – 1.0）
+            <input id="s-opacity" type="number" min="0.3" max="1" step="0.05" />
+          </label>
+          <label class="check">
+            <input id="s-autostart" type="checkbox" />
+            开机自启
+          </label>
+        </section>
+        <section class="settings-group">
+          <h4>账号</h4>
+          <div class="row">
+            <button id="btn-logout" class="btn ghost">退出登录</button>
+          </div>
+        </section>
         <div class="row">
           <button id="btn-save-settings" class="btn primary">保存</button>
-          <button id="btn-logout" class="btn ghost">退出登录</button>
           <button id="btn-close-settings" class="btn ghost">关闭</button>
+          <span id="settings-msg" class="msg"></span>
         </div>
-        <span id="settings-msg" class="msg"></span>
       </div>
     </div>
   </main>
