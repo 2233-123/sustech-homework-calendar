@@ -145,10 +145,18 @@ function renderDay() {
     const li = document.createElement("li");
     const time = document.createElement("span");
     time.className = "item-time";
-    time.textContent = formatTime(row.at);
+    if (row.kind === "schedule" && row.item.all_day) {
+      time.textContent = "全天";
+    } else {
+      time.textContent = formatTime(row.at);
+    }
     const title = document.createElement("span");
     title.className = "item-title";
     title.textContent = row.item.title;
+    if (row.item.color) {
+      li.style.borderLeft = `3px solid ${row.item.color}`;
+      li.style.paddingLeft = "6px";
+    }
     li.append(time, title);
     if (row.kind === "assignment") {
       li.classList.add("bb-row");
@@ -186,6 +194,8 @@ async function doLogin() {
 }
 
 async function doSync() {
+  $("btn-sync").disabled = true;
+  setStatus("同步中…");
   let failure = null;
   try {
     await api.sync();
@@ -195,6 +205,7 @@ async function doSync() {
   await refreshState();
   await loadMonth();
   await loadDay();
+  $("btn-sync").disabled = false;
   if (failure) setStatus(`同步失败：${failure.message}`);
 }
 
@@ -206,6 +217,8 @@ function openScheduleForm(item) {
   state.editingId = item ? item.id : null;
   $("schedule-form-title").textContent = item ? "编辑日程" : "添加日程";
   $("f-title").value = item ? item.title : "";
+  $("f-all-day").checked = !!(item && item.all_day);
+  $("f-color").value = item && item.color ? item.color : "";
   $("f-start").value = item ? toInputValue(item.start_at) : `${state.selected}T09:00`;
   $("f-end").value = item && item.end_at ? toInputValue(item.end_at) : "";
   const sel = $("f-remind");
@@ -235,6 +248,8 @@ async function submitSchedule(ev) {
     start_at: fromInputValue($("f-start").value),
     end_at: fromInputValue($("f-end").value),
     remind_before: $("f-remind").value ? Number($("f-remind").value) : null,
+    all_day: $("f-all-day").checked ? 1 : 0,
+    color: $("f-color").value || null,
     note: $("f-note").value.trim() || null,
   };
   if (!payload.title || !payload.start_at) {

@@ -65,6 +65,10 @@
           <label class="field">标题
             <input id="f-title" type="text" required />
           </label>
+          <label class="check">
+            <input id="f-all-day" type="checkbox" />
+            全天
+          </label>
           <label class="field">开始时间
             <input id="f-start" type="datetime-local" required />
           </label>
@@ -79,6 +83,16 @@
               <option value="1800">提前 30 分钟</option>
               <option value="3600">提前 1 小时</option>
               <option value="86400">提前 1 天</option>
+            </select>
+          </label>
+          <label class="field">颜色
+            <select id="f-color">
+              <option value="">默认</option>
+              <option value="#2563eb">蓝</option>
+              <option value="#16a34a">绿</option>
+              <option value="#ea580c">橙</option>
+              <option value="#dc2626">红</option>
+              <option value="#7c3aed">紫</option>
             </select>
           </label>
           <label class="field">备注
