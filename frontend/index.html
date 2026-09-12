@@ -121,6 +121,24 @@
         <label class="field">BB 提醒（分钟，逗号分隔）
           <input id="s-bb-defaults" type="text" />
         </label>
+        <label class="check">
+          <input id="s-ontop" type="checkbox" />
+          窗口置顶
+        </label>
+        <label class="field">窗口透明度（0.3 – 1.0）
+          <input id="s-opacity" type="number" min="0.3" max="1" step="0.05" />
+        </label>
+        <label class="check">
+          <input id="s-autostart" type="checkbox" />
+          开机自启
+        </label>
+        <label class="field">提醒形式
+          <select id="s-popup">
+            <option value="inapp">应用内气泡</option>
+            <option value="toast">系统通知</option>
+            <option value="both">两者都要</option>
+          </select>
+        </label>
         <div class="row">
           <button id="btn-save-settings" class="btn primary">保存</button>
           <button id="btn-logout" class="btn ghost">退出登录</button>

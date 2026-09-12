@@ -14,6 +14,7 @@ const state = {
   editingId: null,
   monthData: { schedules: [], assignments: [] },
   dayData: { schedules: [], assignments: [] },
+  settings: {},
 };
 
 // ---------- 状态栏 ----------
@@ -295,9 +296,14 @@ async function openSettings() {
   $("settings-msg").textContent = "";
   try {
     const cfg = await api.getSettings();
+    state.settings = cfg;
     $("s-interval").value = cfg.refresh_interval_min ?? 30;
     $("s-bb-remind").checked = !!cfg.bb_remind_enabled;
     $("s-bb-defaults").value = (cfg.bb_remind_defaults || []).join(", ");
+    $("s-ontop").checked = cfg.always_on_top !== false;
+    $("s-opacity").value = typeof cfg.opacity === "number" ? cfg.opacity : 0.95;
+    $("s-autostart").checked = window.hwShell ? await window.hwShell.getAutostart() : !!cfg.autostart;
+    $("s-popup").value = cfg.remind_popup || "inapp";
   } catch (err) {
     $("settings-msg").textContent = err.message;
   }
@@ -309,15 +315,34 @@ async function saveSettings() {
     .split(",")
     .map((s) => Number(s.trim()))
     .filter((n) => Number.isFinite(n) && n > 0);
+  const payload = {
+    refresh_interval_min: Number($("s-interval").value) || 30,
+    bb_remind_enabled: $("s-bb-remind").checked,
+    bb_remind_defaults: defaults,
+    always_on_top: $("s-ontop").checked,
+    opacity: Math.min(1, Math.max(0.3, Number($("s-opacity").value) || 0.95)),
+    autostart: $("s-autostart").checked,
+    remind_popup: $("s-popup").value,
+  };
   try {
-    await api.putSettings({
-      refresh_interval_min: Number($("s-interval").value) || 30,
-      bb_remind_enabled: $("s-bb-remind").checked,
-      bb_remind_defaults: defaults,
-    });
+    const saved = await api.putSettings(payload);
+    state.settings = saved || payload;
+    if (window.hwShell) {
+      window.hwShell.setAlwaysOnTop(payload.always_on_top);
+      window.hwShell.setOpacity(payload.opacity);
+      window.hwShell.setAutostart(payload.autostart);
+    }
     $("settings-msg").textContent = "已保存";
   } catch (err) {
     $("settings-msg").textContent = err.message;
+  }
+}
+
+async function refreshSettings() {
+  try {
+    state.settings = await api.getSettings();
+  } catch {
+    /* 保持默认 */
   }
 }
 
@@ -369,8 +394,14 @@ function connectSSE() {
       const when = d.at ? formatTime(d.at) : "";
       const kindText = d.kind === "assignment" ? "截止" : "开始";
       const sub = when ? `${when} ${kindText}` : "";
-      const show = () => showBubble(d.title || "日程提醒", sub, show);
-      show();
+      const popup = state.settings.remind_popup || "inapp";
+      if (popup !== "inapp" && window.hwShell) {
+        window.hwShell.notify(`🔔 ${d.title || "日程提醒"}`, sub);
+      }
+      if (popup !== "toast" || !window.hwShell) {
+        const show = () => showBubble(d.title || "日程提醒", sub, show);
+        show();
+      }
     },
     sync_done: async () => {
       await refreshState();
@@ -426,6 +457,7 @@ async function init() {
   await refreshState();
   await loadMonth();
   await loadDay();
+  await refreshSettings();
   connectSSE();
 }
 
