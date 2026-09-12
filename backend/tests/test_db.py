@@ -87,3 +87,56 @@ def test_upsert_assignments_rolls_back_on_bad_record(tmp_path):
     # 后续提交也不应把半批数据带进来
     d.set_setting("after", True)
     assert d.list_assignments("2026-01-01T00:00:00", "2027-01-01T00:00:00") == []
+
+
+def test_upsert_assignments_reports_added_and_updated(tmp_path):
+    d = make_db(tmp_path)
+    rec = {
+        "course_id": "1", "course_name": "X", "content_id": "2", "title": "作业A",
+        "due_at": "2026-09-20T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 100,
+    }
+    assert d.upsert_assignments([rec]) == (1, 0)
+    assert d.upsert_assignments([dict(rec, title="作业A改")]) == (0, 1)
+    assert d.upsert_assignments([rec, {
+        "course_id": "9", "course_name": "Y", "content_id": "8", "title": "作业B",
+        "due_at": "2026-09-21T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 50,
+    }]) == (1, 1)
+
+
+def test_purge_assignments_synced_before_removes_stale(tmp_path):
+    d = make_db(tmp_path)
+    d.upsert_assignments([{
+        "course_id": "1", "course_name": "X", "content_id": "2", "title": "旧作业",
+        "due_at": "2026-09-20T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 100,
+    }])
+    assert d.purge_assignments_synced_before("9999-01-01T00:00:00") == 1
+    assert d.list_assignments("2020-01-01T00:00:00", "2030-01-01T00:00:00") == []
+
+
+def test_purge_assignments_synced_before_keeps_fresh(tmp_path):
+    d = make_db(tmp_path)
+    d.upsert_assignments([{
+        "course_id": "1", "course_name": "X", "content_id": "2", "title": "新作业",
+        "due_at": "2026-09-20T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 100,
+    }])
+    assert d.purge_assignments_synced_before("2000-01-01T00:00:00") == 0
+
+
+def test_list_pending_schedules_filters_remind_before(tmp_path):
+    d = make_db(tmp_path)
+    d.add_schedule(title="有提醒", start_at="2026-09-12T14:00:00", remind_before=1800)
+    d.add_schedule(title="无提醒", start_at="2026-09-12T15:00:00")
+    rows = d.list_pending_schedules()
+    assert [r["title"] for r in rows] == ["有提醒"]
+
+
+def test_list_reminder_assignments_filters_due(tmp_path):
+    d = make_db(tmp_path)
+    d.upsert_assignments([
+        {"course_id": "1", "course_name": "X", "content_id": "2", "title": "有截止",
+         "due_at": "2026-09-20T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 100},
+        {"course_id": "1", "course_name": "X", "content_id": "3", "title": "无截止",
+         "due_at": None, "submitted": 0, "status": None, "score": None, "possible": 100},
+    ])
+    rows = d.list_reminder_assignments()
+    assert [r["title"] for r in rows] == ["有截止"]

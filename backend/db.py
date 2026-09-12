@@ -113,11 +113,19 @@ class Database:
         return [dict(r) for r in rows]
 
     # ---------- 作业 ----------
-    def upsert_assignments(self, records: list) -> int:
+    def upsert_assignments(self, records: list):
+        """插入/更新作业缓存，返回 (added, updated) 计数。"""
         ts = _now()
         with self._lock:
             try:
+                existing = {
+                    (row["course_id"], row["content_id"])
+                    for row in self._conn.execute("SELECT course_id, content_id FROM assignment")
+                }
+                added = 0
                 for rec in records:
+                    if (rec["course_id"], rec["content_id"]) not in existing:
+                        added += 1
                     self._conn.execute(
                         "INSERT INTO assignment"
                         " (course_id, course_name, content_id, title, due_at, submitted, status, score, possible, synced_at)"
@@ -136,7 +144,7 @@ class Database:
             except Exception:
                 self._conn.rollback()
                 raise
-        return len(records)
+        return added, len(records) - added
 
     def list_assignments(self, start: str, end: str) -> list:
         with self._lock:
@@ -144,6 +152,29 @@ class Database:
                 "SELECT * FROM assignment WHERE due_at IS NOT NULL"
                 " AND due_at >= ? AND due_at < ? ORDER BY due_at",
                 (start, end),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def purge_assignments_synced_before(self, ts: str) -> int:
+        """删除 synced_at < ts 的作业缓存（剔除 BB 上已删除的作业），返回删除数。"""
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM assignment WHERE synced_at < ?", (ts,))
+            self._conn.commit()
+            return cur.rowcount
+
+    def list_pending_schedules(self) -> list:
+        """所有设置了提醒的日程（供提醒调度扫描）。"""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM schedule WHERE remind_before IS NOT NULL ORDER BY start_at"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_reminder_assignments(self) -> list:
+        """所有带截止时间的作业（供提醒调度扫描）。"""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM assignment WHERE due_at IS NOT NULL ORDER BY due_at"
             ).fetchall()
         return [dict(r) for r in rows]
 
