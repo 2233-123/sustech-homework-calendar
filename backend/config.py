@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -45,18 +46,20 @@ def config_path() -> Path:
 
 
 def load_config() -> dict:
-    cfg = dict(DEFAULT_CONFIG)
+    cfg = copy.deepcopy(DEFAULT_CONFIG)
     p = config_path()
     if p.exists():
         try:
-            cfg.update(json.loads(p.read_text(encoding="utf-8")))
-        except (json.JSONDecodeError, OSError):
-            pass
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+            return cfg
+        if isinstance(data, dict):
+            cfg.update(data)
     return cfg
 
 
 def save_config(cfg: dict) -> None:
-    merged = dict(DEFAULT_CONFIG)
+    merged = copy.deepcopy(DEFAULT_CONFIG)
     merged.update({k: v for k, v in cfg.items() if k in DEFAULT_CONFIG})
     config_path().write_text(
         json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
