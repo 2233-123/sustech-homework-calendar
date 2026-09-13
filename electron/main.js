@@ -44,6 +44,14 @@ function scaledSize(scale, workArea) {
   return { width: Math.round(w * f), height: Math.round(h * f) };
 }
 
+function clampBoundsToWorkArea(bounds, wa) {
+  const width = Math.min(bounds.width, wa.width);
+  const height = Math.min(bounds.height, wa.height);
+  const x = Math.min(Math.max(bounds.x, wa.x), wa.x + wa.width - width);
+  const y = Math.min(Math.max(bounds.y, wa.y), wa.y + wa.height - height);
+  return { x, y, width, height };
+}
+
 function backendCommand() {
   const packagedExe = path.join(process.resourcesPath || "", "backend", "backend.exe");
   if (process.resourcesPath && fs.existsSync(packagedExe)) {
@@ -217,7 +225,7 @@ function hideToEdge() {
     focusable: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
-  // Windows 对 frameless 窗口有最小宽度约束；仅 type:"toolbar" + 构造后 setBounds 可稳定达 W=16（否则实测最小 20/32）。
+  // Windows 对 frameless 窗口有最小宽度约束（本机实测约 20–34 DIP，视窗口类型而定）；仅 type:"toolbar" + 构造后 setBounds 可稳定达 16
   edgeTab.setBounds({ x: wa.x + wa.width - EDGE_TAB_W, y, width: EDGE_TAB_W, height: EDGE_TAB_H });
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     html,body{margin:0;height:100%;background:transparent;overflow:hidden;}
@@ -249,7 +257,7 @@ function restoreFromEdge() {
   if (mainWindow) {
     const b = preCollapseBounds;
     preCollapseBounds = null;
-    if (b) mainWindow.setContentBounds(b);
+    if (b) mainWindow.setContentBounds(clampBoundsToWorkArea(b, screen.getDisplayMatching(b).workArea));
     mainWindow.show();
     mainWindow.focus();
   }
@@ -309,9 +317,8 @@ function registerIpc() {
     const { width, height } = scaledSize(scale, wa);
     mainWindow.setContentSize(width, height);
     const b = mainWindow.getBounds();
-    const x = Math.min(Math.max(b.x, wa.x), wa.x + wa.width - b.width);
-    const y = Math.min(Math.max(b.y, wa.y), wa.y + wa.height - b.height);
-    if (x !== b.x || y !== b.y) mainWindow.setPosition(x, y);
+    const c = clampBoundsToWorkArea(b, wa);
+    if (c.x !== b.x || c.y !== b.y) mainWindow.setPosition(c.x, c.y);
     return { ok: true, scale, width, height };
   });
 }
@@ -344,6 +351,10 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
+    if (edgeTab) {
+      restoreFromEdge();
+      return;
+    }
     if (mainWindow) {
       mainWindow.show();
       mainWindow.focus();
