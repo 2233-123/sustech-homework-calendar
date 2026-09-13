@@ -210,11 +210,9 @@ body.compact .modal { top: 0; bottom: auto; height: 100vh; }
 /* 紧凑态压缩设置卡片内部间距，降低低档位下的溢出量 */
 body.compact .modal-card { padding: 10px 12px; }
 body.compact .settings-group h4 { margin: 6px 0 4px; }
-body.compact::-webkit-scrollbar { display: block; width: 6px; }
-body.compact::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
-body.compact::-webkit-scrollbar-track { background: transparent; }
-/* 让文档本身可滚动（documentElement.scrollHeight > clientHeight），滚轮可浏览全部内容；细滚动条 */
-html:has(body.compact) { height: auto; overflow-y: auto; scrollbar-width: thin; }
-html:has(body.compact)::-webkit-scrollbar { display: block; width: 6px; }
+/* 让文档本身可滚动（documentElement.scrollHeight > clientHeight），滚轮可浏览全部内容 */
+/* scrollbar-width:auto 仅用于覆盖全局 *{scrollbar-width:none}；auto 不抑制 ::-webkit-scrollbar，从而得到 6px 细条 */
+html:has(body.compact) { height: auto; overflow-y: auto; scrollbar-width: auto; }
+html:has(body.compact)::-webkit-scrollbar { width: 6px; height: 6px; display: block; }
 html:has(body.compact)::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
 html:has(body.compact)::-webkit-scrollbar-track { background: transparent; }
