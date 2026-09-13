@@ -21,7 +21,7 @@
 ## 运行
 
 ```powershell
-node --test "frontend/tests/**/*.test.js"   # 37 用例
+node --test "frontend/tests/**/*.test.js"   # 39 用例
 ```
 
 ## 修改注意点

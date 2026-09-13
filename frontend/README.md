@@ -26,7 +26,7 @@
 ```powershell
 # 开发：先起后端，再浏览器访问其打印的地址
 .\.venv\Scripts\python -m backend.main
-node --test "frontend/tests/**/*.test.js"   # 37 用例
+node --test "frontend/tests/**/*.test.js"   # 39 用例
 ```
 
 ## 修改注意点
