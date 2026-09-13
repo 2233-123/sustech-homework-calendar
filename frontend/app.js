@@ -950,15 +950,9 @@ async function init() {
   await loadMonth();
   await loadDay();
   uiReady = true; // N1：数据首轮渲染完成后才允许上报 fit（避免半成品高度）
-  try {
-    if (document.fonts && document.fonts.ready) await document.fonts.ready; // 等字体落定再测高
-  } catch {
-    /* 忽略 */
-  }
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  reportFit();
+  reportFit(); // 直接首报（offsetHeight 读取强制同步布局；隐藏窗口 rAF 被节流，不能等 rAF）
+  setTimeout(reportFit, 0); // 单次兜底，不再用双 rAF
   await refreshSettings();
-  setTimeout(reportFit, 300); // 布局/滚动条落定后再校正一次，消除首帧亚像素残差
   if (window.ResizeObserver) new ResizeObserver(() => reportFit()).observe($("app")); // 捕获后续内容高变化
   connectSSE();
 }

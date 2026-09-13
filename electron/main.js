@@ -257,6 +257,7 @@ function createWindow(port, prefs) {
   mainWindow.loadURL(`http://127.0.0.1:${port}/`);
   // 先不 show：等首次 fit-height 上报再显示（1.2s 超时兜底），避免"先大后缩"闪烁
   firstShowTimer = setTimeout(() => {
+    firstShowTimer = null; // M2：清空兜底定时器，避免慢启动后所有 fit 永久走 snap
     firstFitDone = true;
     if (mainWindow && !mainWindow.isVisible()) mainWindow.show();
   }, 3000);
