@@ -199,3 +199,17 @@ body {
 .slider-row { display: flex; align-items: center; gap: 8px; }
 .slider-row input[type="range"] { flex: 1; accent-color: #2563eb; padding: 0; }
 .slider-val { min-width: 38px; text-align: right; font-size: 12px; }
+
+/* 紧凑模式（<70%）：字号钉在 MIN_ZOOM，视口继续收窄，纵向改为页面滚动 */
+body.compact { overflow-y: auto; }
+body.compact .widget { height: auto; min-height: 100vh; }
+body.compact .day-panel { flex: none; }
+body.compact .day-list { flex: none; overflow: visible; }
+body.compact::-webkit-scrollbar { display: block; width: 6px; }
+body.compact::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
+body.compact::-webkit-scrollbar-track { background: transparent; }
+/* 让文档本身可滚动（documentElement.scrollHeight > clientHeight），滚轮可浏览全部内容 */
+html:has(body.compact) { height: auto; overflow-y: auto; }
+html:has(body.compact)::-webkit-scrollbar { display: block; width: 6px; }
+html:has(body.compact)::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
+html:has(body.compact)::-webkit-scrollbar-track { background: transparent; }

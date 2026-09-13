@@ -372,6 +372,11 @@ function updateScaleReadout() {
   $("s-scale-val").textContent = `${p}%（${w}×${h}）`;
 }
 
+// 低于 70% 进入紧凑模式：字号钉在 MIN_ZOOM，视口继续收窄、纵向改用页面滚动
+function setCompact(p) {
+  document.body.classList.toggle("compact", Number(p) < 70);
+}
+
 async function openSettings() {
   $("settings-msg").textContent = "";
   state.remindDirty = [false, false];
@@ -400,6 +405,7 @@ async function openSettings() {
     $("s-opacity-val").textContent = Math.round(Number($("s-opacity").value) * 100) + "%";
     $("s-scale").value = String(Math.min(150, Math.max(40, Math.round(Number(cfg.window_scale) || 100))));
     updateScaleReadout();
+    setCompact($("s-scale").value);
     let autostart = !!cfg.autostart;
     if (window.hwShell) {
       try {
@@ -619,9 +625,39 @@ function bind() {
       /* 写穿失败不打断；「保存」仍可统一提交 */
     }
   });
-  $("s-scale").addEventListener("input", updateScaleReadout);
-  $("s-scale").addEventListener("change", async () => {
-    const p = Number($("s-scale").value) || 100;
+  const scaleSlider = $("s-scale");
+  let scaleIpcAt = 0;
+  let scaleTimer = null;
+  const sendScale = (p) => {
+    scaleIpcAt = Date.now();
+    if (window.hwShell) window.hwShell.setWindowScale(p);
+    scheduleAnchor();
+  };
+  scaleSlider.addEventListener("input", () => {
+    updateScaleReadout();
+    const p = Number(scaleSlider.value) || 100;
+    setCompact(p);
+    const now = Date.now();
+    if (now - scaleIpcAt > 60) {
+      if (scaleTimer) {
+        clearTimeout(scaleTimer);
+        scaleTimer = null;
+      }
+      sendScale(p);
+    } else if (!scaleTimer) {
+      scaleTimer = setTimeout(() => {
+        scaleTimer = null;
+        sendScale(Number(scaleSlider.value) || 100);
+      }, 60);
+    }
+  });
+  scaleSlider.addEventListener("change", async () => {
+    if (scaleTimer) {
+      clearTimeout(scaleTimer);
+      scaleTimer = null;
+    }
+    const p = Number(scaleSlider.value) || 100;
+    setCompact(p);
     if (window.hwShell) {
       try {
         const r = await window.hwShell.setWindowScale(p);
@@ -632,6 +668,7 @@ function bind() {
         /* 保持标称读数 */
       }
     }
+    stopAnchor();
     try {
       const saved = await api.putSettings({ window_scale: p });
       if (saved) state.settings = saved;
@@ -639,6 +676,73 @@ function bind() {
       /* 写穿失败不打断 */
     }
   });
+
+  // ---- 光标锚定：拖动缩放条时保持「滑条行」屏幕位置不动 ----
+  let anchor = null;
+  let anchorBusy = false;
+  let anchorTimer = null;
+  async function readAnchor() {
+    if (!window.hwShell || !window.hwShell.getWindowInfo) return null;
+    try {
+      const info = await window.hwShell.getWindowInfo();
+      if (!info) return null;
+      const rect = scaleSlider.getBoundingClientRect();
+      const zoom = info.width / window.innerWidth;
+      return {
+        x: info.x + (rect.left + rect.width / 2) * zoom,
+        y: info.y + (rect.top + rect.height / 2) * zoom,
+      };
+    } catch {
+      return null;
+    }
+  }
+  async function correctAnchor() {
+    if (!anchor || anchorBusy || !window.hwShell || !window.hwShell.nudgeWindow) return;
+    anchorBusy = true;
+    try {
+      const info = await window.hwShell.getWindowInfo();
+      if (!info) return;
+      const rect = scaleSlider.getBoundingClientRect();
+      const zoom = info.width / window.innerWidth;
+      const dx = anchor.x - (info.x + (rect.left + rect.width / 2) * zoom);
+      const dy = anchor.y - (info.y + (rect.top + rect.height / 2) * zoom);
+      // IPC 只传整数（contextBridge 对非整数 dx/dy 转换失败），1px 粒度
+      const rx = Math.round(dx);
+      const ry = Math.round(dy);
+      if ((rx || ry) && Math.abs(dx) + Math.abs(dy) > 0.5) await window.hwShell.nudgeWindow(rx, ry);
+    } catch {
+      /* 锚定非关键路径 */
+    } finally {
+      anchorBusy = false;
+    }
+  }
+  function tickAnchor() {
+    anchorTimer = null;
+    if (!anchor) return;
+    if (!anchorBusy) {
+      correctAnchor().finally(() => {
+        if (anchor) anchorTimer = setTimeout(tickAnchor, 12);
+      });
+    } else {
+      anchorTimer = setTimeout(tickAnchor, 12);
+    }
+  }
+  function scheduleAnchor() {
+    if (anchor && anchorTimer === null) anchorTimer = setTimeout(tickAnchor, 12);
+  }
+  function stopAnchor() {
+    anchor = null;
+    if (anchorTimer) {
+      clearTimeout(anchorTimer);
+      anchorTimer = null;
+    }
+  }
+  scaleSlider.addEventListener("pointerdown", async () => {
+    anchor = await readAnchor();
+    scheduleAnchor();
+  });
+  scaleSlider.addEventListener("pointerup", stopAnchor);
+  scaleSlider.addEventListener("pointercancel", stopAnchor);
   $("btn-item-close").addEventListener("click", closeItemOverview);
   $("btn-item-edit").addEventListener("click", () => {
     const o = state.overview;
@@ -674,6 +778,7 @@ async function init() {
   await loadMonth();
   await loadDay();
   await refreshSettings();
+  setCompact(Number(state.settings.window_scale) || 100);
   connectSSE();
 }
 

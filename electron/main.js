@@ -9,6 +9,7 @@ const WINDOW_WIDTH = 408;
 const WINDOW_HEIGHT = 760;
 const SCALE_MIN = 40;
 const SCALE_MAX = 150;
+const MIN_ZOOM = 0.7;
 
 let backendProc = null;
 let mainWindow = null;
@@ -18,6 +19,9 @@ let quitting = false;
 let posTimer = null;
 let edgeTab = null;
 let preCollapseBounds = null;
+let scaleCurrent = 100;
+let scaleTarget = 100;
+let scaleTimer = null;
 const EDGE_TAB_W = 16;
 const EDGE_TAB_H = 120;
 
@@ -50,6 +54,48 @@ function clampBoundsToWorkArea(bounds, wa) {
   const x = Math.min(Math.max(bounds.x, wa.x), wa.x + wa.width - width);
   const y = Math.min(Math.max(bounds.y, wa.y), wa.y + wa.height - height);
   return { x, y, width, height };
+}
+
+// 平滑缩放：把 currentScale 逐帧逼近 targetScale，每帧同步落地内容尺寸与 zoom。
+function applyScaleFrame(s) {
+  if (!mainWindow) return;
+  const wa = screen.getDisplayMatching(mainWindow.getBounds()).workArea;
+  const { width, height } = scaledSize(s, wa);
+  const zoom = Math.max(s / 100, MIN_ZOOM);
+  mainWindow.setContentSize(width, height);
+  mainWindow.webContents.setZoomFactor(zoom);
+  const b = mainWindow.getBounds();
+  const c = clampBoundsToWorkArea(b, wa);
+  if (c.x !== b.x || c.y !== b.y) {
+    mainWindow.setPosition(c.x, c.y);
+    saveWindowPos();
+  }
+}
+
+function stopScaleAnim() {
+  if (scaleTimer) {
+    clearInterval(scaleTimer);
+    scaleTimer = null;
+  }
+}
+
+function startScaleAnim() {
+  if (scaleTimer) return;
+  scaleTimer = setInterval(() => {
+    if (!mainWindow) {
+      stopScaleAnim();
+      return;
+    }
+    const d = scaleTarget - scaleCurrent;
+    if (Math.abs(d) < 0.5) {
+      scaleCurrent = scaleTarget;
+      applyScaleFrame(scaleCurrent);
+      stopScaleAnim();
+      return;
+    }
+    scaleCurrent += d * 0.35;
+    applyScaleFrame(scaleCurrent);
+  }, 16);
 }
 
 function backendCommand() {
@@ -183,9 +229,11 @@ function createWindow(port, prefs) {
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(__dirname, "preload.js"),
-      zoomFactor: bounds.width / WINDOW_WIDTH, // 内容随窗口等比缩放，CSS 布局视口恒 ~408
+      zoomFactor: Math.max(prefs.windowScale / 100, MIN_ZOOM), // 最小字号下限；视口 = 内容/zoom
     },
   });
+  scaleCurrent = clampScale(prefs.windowScale);
+  scaleTarget = scaleCurrent;
   mainWindow.setOpacity(prefs.opacity);
   mainWindow.loadURL(`http://127.0.0.1:${port}/`);
   mainWindow.once("ready-to-show", () => mainWindow.show());
@@ -213,6 +261,9 @@ function toggleWindow() {
 
 function hideToEdge() {
   if (!mainWindow || !mainWindow.isVisible() || edgeTab) return false;
+  stopScaleAnim(); // 收起前让平滑循环落定，避免隐藏时仍在改尺寸
+  scaleCurrent = scaleTarget;
+  applyScaleFrame(scaleCurrent);
   preCollapseBounds = mainWindow.getContentBounds();
   const wa = screen.getDisplayMatching(preCollapseBounds).workArea;
   const y = Math.min(
@@ -325,17 +376,26 @@ function registerIpc() {
   ipcMain.handle("shell:set-window-scale", (_e, p) => {
     if (!mainWindow) return { ok: false };
     const scale = clampScale(p);
+    scaleTarget = scale; // 设定目标，由平滑循环逼近
+    startScaleAnim();
     const wa = screen.getDisplayMatching(mainWindow.getBounds()).workArea;
     const { width, height } = scaledSize(scale, wa);
-    mainWindow.setContentSize(width, height);
-    mainWindow.webContents.setZoomFactor(width / WINDOW_WIDTH); // 与窗口尺寸同步，布局视口恒 ~408
-    const b = mainWindow.getBounds();
-    const c = clampBoundsToWorkArea(b, wa);
-    if (c.x !== b.x || c.y !== b.y) {
-      mainWindow.setPosition(c.x, c.y);
-      saveWindowPos();
-    }
     return { ok: true, scale, width, height };
+  });
+  ipcMain.handle("shell:get-window-info", () => {
+    if (!mainWindow) return null;
+    const b = mainWindow.getBounds();
+    return { x: b.x, y: b.y, width: b.width, height: b.height };
+  });
+  ipcMain.handle("shell:nudge-window", (_e, d) => {
+    if (!mainWindow) return { ok: false };
+    const dx = Number(d && d.dx) || 0;
+    const dy = Number(d && d.dy) || 0;
+    const wa = screen.getDisplayMatching(mainWindow.getBounds()).workArea;
+    const b = mainWindow.getBounds();
+    const c = clampBoundsToWorkArea({ x: b.x + dx, y: b.y + dy, width: b.width, height: b.height }, wa);
+    mainWindow.setPosition(c.x, c.y);
+    return { ok: true, x: c.x, y: c.y };
   });
 }
 
