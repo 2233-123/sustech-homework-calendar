@@ -30,4 +30,4 @@ node --test "frontend/tests/**/*.test.js"
 
 - 修改导出签名需同步 `frontend/tests/*.test.js`。
 - `sse.js` 的事件名与后端 `events.py` 保持一一对应，改名需两端同步。
-- `colors.js` 的分配必须保持确定性（同输入同输出、已分配不改色）；色相持久化由 `app.js` 负责，模块本身无副作用。
+- `colors.js` 的分配必须保持确定性（同输入同输出、已分配不改色）；色相持久化由 `app.js` 负责（后端配置 `course_hues`），模块本身无副作用。

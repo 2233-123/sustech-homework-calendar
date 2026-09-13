@@ -32,6 +32,6 @@ node --test "frontend/tests/**/*.test.js"   # 37 用例
 ## 修改注意点
 
 - 布局不依赖固定 `100vh`：窗口高度由内容经 `fit-height` 驱动，改样式勿重新引入视口耦合。
-- 课程标签颜色由 `lib/colors.js` 分配、持久化在 `localStorage["hw.courseHues.v1"]`；已分配课程不得改色（新课程走 `assignHues` 增量补齐）。
+- 课程标签颜色由 `lib/colors.js` 分配，**持久化在后端配置 `course_hues`（`config.json`）**——后端端口每次启动随机（origin 变化），localStorage 会随之失效，勿改回浏览器存储；已分配课程不得改色（新课程走 `assignHues` 增量补齐，防抖 400ms 经 `PUT /api/settings` 单键 patch 落盘）。
 - `body.overflowing` 为溢出兜底（工作区放不下时才出现滚动条），不要常态启用。
 - 分页数学集中在 `lib/page.js`，改动分页请同步单测。
