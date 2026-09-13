@@ -372,7 +372,7 @@ function updateScaleReadout() {
   $("s-scale-val").textContent = `${p}%（${w}×${h}）`;
 }
 
-// 低于 70% 进入紧凑模式：字号钉在 MIN_ZOOM，视口继续收窄、纵向改用页面滚动
+// 低于 70% 进入紧凑模式：字号钉在 MIN_ZOOM（见 electron/main.js），视口继续收窄、纵向改用页面滚动
 function setCompact(p) {
   document.body.classList.toggle("compact", Number(p) < 70);
 }
@@ -688,6 +688,7 @@ function bind() {
       }
     }
     stopAnchor();
+    setTimeout(ensureScaleVisible, 300); // 键盘/程序化改档后布局落定，再复检滑条可见性
     try {
       const saved = await api.putSettings({ window_scale: p });
       if (saved) state.settings = saved;
@@ -700,6 +701,7 @@ function bind() {
   let anchor = null;
   let anchorBusy = false;
   let anchorTimer = null;
+  let anchorGen = 0; // 代数令牌：pointerdown 异步读锚点期间若已 pointerup，则丢弃过期结果
   async function readAnchor() {
     if (!window.hwShell || !window.hwShell.getWindowInfo) return null;
     try {
@@ -725,7 +727,7 @@ function bind() {
       const zoom = info.width / window.innerWidth;
       const dx = anchor.x - (info.x + (rect.left + rect.width / 2) * zoom);
       const dy = anchor.y - (info.y + (rect.top + rect.height / 2) * zoom);
-      // IPC 只传整数（contextBridge 对非整数 dx/dy 转换失败），1px 粒度
+      // IPC 只传整数：按 1px DIP 取整，避免亚像素 nudge 抖动
       const rx = Math.round(dx);
       const ry = Math.round(dy);
       if ((rx || ry) && Math.abs(dx) + Math.abs(dy) > 0.5) await window.hwShell.nudgeWindow(rx, ry);
@@ -751,6 +753,7 @@ function bind() {
     if (anchor && anchorTimer === null) anchorTimer = setTimeout(tickAnchor, 12);
   }
   function stopAnchor() {
+    anchorGen++; // 使进行中的 pointerdown 异步读锚点失效
     anchor = null;
     if (anchorTimer) {
       clearTimeout(anchorTimer);
@@ -759,7 +762,10 @@ function bind() {
   }
   scaleSlider.addEventListener("pointerdown", async () => {
     ensureScaleVisible();
-    anchor = await readAnchor();
+    const gen = ++anchorGen;
+    const a = await readAnchor();
+    if (gen !== anchorGen || !a) return; // 过期或已结束 → 丢弃，避免启动无人停止的循环
+    anchor = a;
     scheduleAnchor();
   });
   scaleSlider.addEventListener("pointerup", stopAnchor);

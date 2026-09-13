@@ -205,14 +205,16 @@ body.compact { overflow-y: auto; }
 body.compact .widget { height: auto; min-height: 100vh; }
 body.compact .day-panel { flex: none; }
 body.compact .day-list { flex: none; overflow: visible; }
+/* compact 下弹层钉到视口（其包含块是带 backdrop-filter 的 .widget），避免卡片随文档高度居中而被窗口底边裁掉 */
+body.compact .modal { top: 0; bottom: auto; height: 100vh; }
 /* 紧凑态压缩设置卡片内部间距，降低低档位下的溢出量 */
 body.compact .modal-card { padding: 10px 12px; }
 body.compact .settings-group h4 { margin: 6px 0 4px; }
 body.compact::-webkit-scrollbar { display: block; width: 6px; }
 body.compact::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
 body.compact::-webkit-scrollbar-track { background: transparent; }
-/* 让文档本身可滚动（documentElement.scrollHeight > clientHeight），滚轮可浏览全部内容 */
-html:has(body.compact) { height: auto; overflow-y: auto; }
+/* 让文档本身可滚动（documentElement.scrollHeight > clientHeight），滚轮可浏览全部内容；细滚动条 */
+html:has(body.compact) { height: auto; overflow-y: auto; scrollbar-width: thin; }
 html:has(body.compact)::-webkit-scrollbar { display: block; width: 6px; }
 html:has(body.compact)::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
 html:has(body.compact)::-webkit-scrollbar-track { background: transparent; }

@@ -66,10 +66,7 @@ function applyScaleFrame(s) {
   mainWindow.webContents.setZoomFactor(zoom);
   const b = mainWindow.getBounds();
   const c = clampBoundsToWorkArea(b, wa);
-  if (c.x !== b.x || c.y !== b.y) {
-    mainWindow.setPosition(c.x, c.y);
-    saveWindowPos();
-  }
+  if (c.x !== b.x || c.y !== b.y) mainWindow.setPosition(c.x, c.y); // 落定后在收敛分支统一落盘
 }
 
 function stopScaleAnim() {
@@ -90,6 +87,7 @@ function startScaleAnim() {
     if (Math.abs(d) < 0.5) {
       scaleCurrent = scaleTarget;
       applyScaleFrame(scaleCurrent);
+      saveWindowPos(); // 平滑落定后一次性落盘（避免动画每帧成串 PUT）
       stopScaleAnim();
       return;
     }
