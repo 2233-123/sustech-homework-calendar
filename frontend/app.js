@@ -15,27 +15,45 @@ let lastFitAt = 0;
 let fitTimer = null;
 let overflowState = false;
 let lastClientH = -1;
-let uiReady = false;
+let overflowTrailTimer = null;
+let uiReady = false; // 由 init() 数据渲染完成后置位，避免首个 fit 测到半成品高度
 
-// C1：滞回（进入 >8px，退出 ≤1px）+ 仅在尺寸稳定后评估，避免滚动条↔宽度的反馈抖动
+// C1/N2：进入需 residual>8 且尺寸稳定；退出只需 residual≤1（不受稳定门阻拦，避免动画后常亮）
 function evaluateOverflow() {
   const de = document.documentElement;
   const clientH = de.clientHeight;
+  const residual = de.scrollHeight - clientH;
+  if (overflowState) {
+    if (residual <= 1) {
+      overflowState = false;
+      document.body.classList.remove("overflowing");
+    }
+    lastClientH = clientH;
+    return;
+  }
   const stable = clientH === lastClientH;
   lastClientH = clientH;
-  if (!stable) return;
-  const residual = de.scrollHeight - clientH;
-  if (!overflowState && residual > 8) overflowState = true;
-  else if (overflowState && residual <= 1) overflowState = false;
-  document.body.classList.toggle("overflowing", overflowState);
+  if (stable && residual > 8) {
+    overflowState = true;
+    document.body.classList.add("overflowing");
+  }
+}
+
+function scheduleOverflowTrail() {
+  if (overflowTrailTimer) clearTimeout(overflowTrailTimer);
+  overflowTrailTimer = setTimeout(() => {
+    overflowTrailTimer = null;
+    evaluateOverflow();
+  }, 150);
 }
 
 function reportFit() {
-  if (!uiReady) return; // M1b：文档就绪前不上报，消除内容渐进增长期的中间尺寸
+  if (!uiReady) return;
   const run = () => {
     fitTimer = null;
     lastFitAt = Date.now();
     evaluateOverflow();
+    scheduleOverflowTrail(); // 收敛后尾随再评估一次，确保终态正确
     const h = Math.round($("app").offsetHeight);
     if (h !== lastFitH) {
       lastFitH = h;
@@ -53,14 +71,6 @@ function reportFit() {
     fitTimer = setTimeout(run, 50 - since);
   }
 }
-
-function markUiReady() {
-  if (uiReady) return;
-  uiReady = true;
-  requestAnimationFrame(() => requestAnimationFrame(() => reportFit()));
-}
-if (document.readyState === "complete") markUiReady();
-else window.addEventListener("load", markUiReady);
 
 const state = {
   year: new Date().getFullYear(),
@@ -921,6 +931,7 @@ function bind() {
   // I1 兜底：重新可见/获焦时重置去重并重报，修正隐藏期间的内容高变化
   const onVisible = () => {
     if (document.hidden) return;
+    if (Math.round($("app").offsetHeight) === lastFitH) return; // 高未变 → 不重置、不上报（避免无谓 PUT）
     lastFitH = -1;
     reportFit();
   };
@@ -938,8 +949,15 @@ async function init() {
   await refreshState();
   await loadMonth();
   await loadDay();
-  await refreshSettings();
+  uiReady = true; // N1：数据首轮渲染完成后才允许上报 fit（避免半成品高度）
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready; // 等字体落定再测高
+  } catch {
+    /* 忽略 */
+  }
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   reportFit();
+  await refreshSettings();
   setTimeout(reportFit, 300); // 布局/滚动条落定后再校正一次，消除首帧亚像素残差
   if (window.ResizeObserver) new ResizeObserver(() => reportFit()).observe($("app")); // 捕获后续内容高变化
   connectSSE();

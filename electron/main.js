@@ -27,6 +27,7 @@ let heightTarget = WINDOW_HEIGHT; // 目标窗口内容高（DIP）
 let lastContentH = WINDOW_HEIGHT; // 最近一次内容 CSS 高（来自渲染层 fit-height）
 let firstFitDone = false;
 let firstShowTimer = null;
+let lastSavedPos = null;
 const EDGE_TAB_W = 16;
 const EDGE_TAB_H = 120;
 
@@ -195,12 +196,14 @@ async function loadWindowPrefs(port) {
 async function saveWindowPos() {
   if (!mainWindow || !backendPort) return;
   const [x, y] = mainWindow.getPosition();
+  if (lastSavedPos && lastSavedPos[0] === x && lastSavedPos[1] === y) return; // N3b：位置未变不重复 PUT
   try {
     await fetch(`http://127.0.0.1:${backendPort}/api/settings`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ window_pos: [x, y] }),
     });
+    lastSavedPos = [x, y];
   } catch {
     /* 位置记忆非关键路径，忽略失败 */
   }
@@ -256,7 +259,7 @@ function createWindow(port, prefs) {
   firstShowTimer = setTimeout(() => {
     firstFitDone = true;
     if (mainWindow && !mainWindow.isVisible()) mainWindow.show();
-  }, 1200);
+  }, 3000);
   mainWindow.on("moved", debounce(saveWindowPos, 500));
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -416,15 +419,20 @@ function registerIpc() {
     lastContentH = Hc;
     recomputeHeightTarget();
     if (!firstFitDone) {
-      // M1：首个 fit 直接 snap 到目标尺寸再显示，避免"先缩后大"动画与瞬时裁剪
+      // N1：首报后给 ~120ms 收集窗口，若期间收到更准的 h 则用新值再 snap 后才显示
       firstFitDone = true;
-      if (firstShowTimer) {
-        clearTimeout(firstShowTimer);
+      if (firstShowTimer) clearTimeout(firstShowTimer);
+      firstShowTimer = setTimeout(() => {
         firstShowTimer = null;
-      }
+        if (mainWindow && !mainWindow.isVisible()) mainWindow.show();
+      }, 120);
       heightCurrent = heightTarget;
       applyScaleFrame(scaleCurrent, heightCurrent);
-      mainWindow.show();
+      return { ok: true, height: heightTarget };
+    }
+    if (firstShowTimer) {
+      heightCurrent = heightTarget;
+      applyScaleFrame(scaleCurrent, heightCurrent);
       return { ok: true, height: heightTarget };
     }
     startScaleAnim();
@@ -433,7 +441,7 @@ function registerIpc() {
   ipcMain.handle("shell:get-window-info", () => {
     if (!mainWindow) return null;
     const b = mainWindow.getBounds();
-    return { x: b.x, y: b.y, width: b.width, height: b.height };
+    return { x: b.x, y: b.y, width: b.width, height: b.height, visible: mainWindow.isVisible() };
   });
   ipcMain.handle("shell:nudge-window", (_e, d) => {
     if (!mainWindow) return { ok: false };
