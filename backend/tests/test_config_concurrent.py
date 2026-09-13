@@ -41,9 +41,12 @@ def test_concurrent_updates_no_lost_update(tmp_appdata):
         t.join()
 
     cfg = config.load_config()
-    # window_pos 的更新未被并发的 window_scale 写覆盖
-    assert isinstance(cfg["window_pos"], list), cfg
+    # window_pos 的更新未被并发的 window_scale 写覆盖（严格成员断言，可抓「pos 更新全丢」）
+    assert cfg["window_pos"] in [[i, i] for i in range(0, n, 2)], cfg
     # window_scale 的更新未被并发的 window_pos 写覆盖
     assert cfg["window_scale"] in range(1, n, 2), cfg
+    # 终态两类键均非默认值
+    assert cfg["window_pos"] is not None
+    assert cfg["window_scale"] != 100
     # 文件仍可正常读回
     assert cfg["refresh_interval_min"] == 30

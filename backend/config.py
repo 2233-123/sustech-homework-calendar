@@ -8,14 +8,18 @@ import copy
 import json
 import os
 import threading
+import time
 from pathlib import Path
 
 APP_DIR_NAME = "作业日程"
 
-# 串行化「读-改-写」配置更新：Flask threaded=True 下，多请求并发写同一份
-# 配置快照会相互覆盖（N1：saveWindowPos 的 {window_pos} 与渲染层写穿的
-# {window_scale} 在缩放钳制场景几乎同时到达，非原子 load→save 会丢更新）。
-_CONFIG_LOCK = threading.Lock()
+# 串行化全部配置读/写：Flask threaded=True 下，多请求并发写同一份配置快照会
+# 相互覆盖（N1：saveWindowPos 的 {window_pos} 与渲染层写穿的 {window_scale} 在
+# 缩放钳制场景几乎同时到达，非原子 load→save 会丢更新）；同时 Windows 下
+# os.replace 会与读句柄冲突（opens 未带 FILE_SHARE_DELETE）。用 RLock 串行化
+# 读与写，既消除丢更新也杜绝共享冲突——锁顺序单一（只此一把）、可重入，无嵌套
+# 死锁风险（update_config 持锁时会再次进入 load_config/save_config）。
+_CONFIG_LOCK = threading.RLock()
 
 DEFAULT_CONFIG = {
     "refresh_interval_min": 30,
@@ -53,34 +57,48 @@ def config_path() -> Path:
 
 
 def load_config() -> dict:
-    cfg = copy.deepcopy(DEFAULT_CONFIG)
-    p = config_path()
-    if p.exists():
+    with _CONFIG_LOCK:
+        cfg = copy.deepcopy(DEFAULT_CONFIG)
+        p = config_path()
+        if p.exists():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                return cfg
+            if isinstance(data, dict):
+                cfg.update(data)
+        return cfg
+
+
+def _replace_with_retry(tmp: Path, path: Path) -> None:
+    """Windows 下读句柄可能瞬时阻止覆盖：有界重试（3 次，间隔 10ms）。"""
+    for attempt in range(3):
         try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-            return cfg
-        if isinstance(data, dict):
-            cfg.update(data)
-    return cfg
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 2:
+                raise
+            time.sleep(0.01)
 
 
 def save_config(cfg: dict) -> None:
-    merged = copy.deepcopy(DEFAULT_CONFIG)
-    merged.update({k: v for k, v in cfg.items() if k in DEFAULT_CONFIG})
-    path = config_path()
-    tmp = path.parent / (path.name + ".tmp")
-    try:
-        tmp.write_text(
-            json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        os.replace(tmp, path)  # 同盘原子覆盖，避免读到半写文件
-    except BaseException:
+    with _CONFIG_LOCK:
+        merged = copy.deepcopy(DEFAULT_CONFIG)
+        merged.update({k: v for k, v in cfg.items() if k in DEFAULT_CONFIG})
+        path = config_path()
+        tmp = path.parent / (path.name + ".tmp")
         try:
-            tmp.unlink()
-        except OSError:
-            pass
-        raise
+            tmp.write_text(
+                json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            _replace_with_retry(tmp, path)  # 同盘原子覆盖，避免读到半写文件
+        except BaseException:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            raise
 
 
 def update_config(patch: dict) -> dict:
