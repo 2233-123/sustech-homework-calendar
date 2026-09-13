@@ -390,6 +390,7 @@ async function openSettings() {
     $("s-ontop").checked = cfg.always_on_top !== false;
     $("s-opacity").value =
       typeof cfg.opacity === "number" ? Math.min(1, Math.max(0.3, cfg.opacity)) : 0.95;
+    $("s-opacity-val").textContent = Math.round(Number($("s-opacity").value) * 100) + "%";
     let autostart = !!cfg.autostart;
     if (window.hwShell) {
       try {
@@ -566,6 +567,27 @@ function bind() {
     });
   });
   $("btn-settings").addEventListener("click", openSettings);
+  let opacityIpcAt = 0;
+  const opacitySlider = $("s-opacity");
+  opacitySlider.addEventListener("input", () => {
+    const v = Number(opacitySlider.value) || 0.95;
+    $("s-opacity-val").textContent = Math.round(v * 100) + "%";
+    const now = Date.now();
+    if (window.hwShell && now - opacityIpcAt > 50) {
+      opacityIpcAt = now;
+      window.hwShell.setOpacity(v);
+    }
+  });
+  opacitySlider.addEventListener("change", async () => {
+    const v = Number(opacitySlider.value) || 0.95;
+    if (window.hwShell) window.hwShell.setOpacity(v);
+    try {
+      const saved = await api.putSettings({ opacity: v });
+      if (saved) state.settings = saved;
+    } catch {
+      /* 写穿失败不打断；「保存」仍可统一提交 */
+    }
+  });
   $("btn-item-close").addEventListener("click", closeItemOverview);
   $("btn-item-edit").addEventListener("click", () => {
     const o = state.overview;

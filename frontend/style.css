@@ -195,3 +195,7 @@ body {
 .item-fields { display: grid; grid-template-columns: 64px 1fr; gap: 4px 8px; margin: 8px 0; font-size: 13px; }
 .item-fields dt { color: #9aa4b2; }
 .item-fields dd { margin: 0; word-break: break-word; }
+
+.slider-row { display: flex; align-items: center; gap: 8px; }
+.slider-row input[type="range"] { flex: 1; accent-color: #2563eb; }
+.slider-val { min-width: 38px; text-align: right; font-size: 12px; }
