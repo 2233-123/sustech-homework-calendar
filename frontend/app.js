@@ -2,6 +2,7 @@
 import { createApi } from "./lib/api.js";
 import { createSSE } from "./lib/sse.js";
 import { addMonths, monthGrid } from "./lib/cal.js";
+import { assignHues, contrastText, hslColor, hueForName } from "./lib/colors.js";
 import { formatDateLabel, formatDateTime, formatLead, formatTime, toDateStr } from "./lib/fmt.js";
 import { clampPage, pageCount } from "./lib/page.js";
 
@@ -81,10 +82,35 @@ function reportFit() {
   }
 }
 
+// ---------- 课程色相表（localStorage 持久化，同课程颜色永久稳定） ----------
+const HUE_STORE_KEY = "hw.courseHues.v1";
+
+/** 读取课程名 → 色相映射；无数据/损坏/隐私模式（localStorage 不可用）时退化为空 Map。 */
+function loadCourseHues() {
+  try {
+    const obj = JSON.parse(localStorage.getItem(HUE_STORE_KEY) || "{}");
+    return new Map(
+      Object.entries(obj).filter(([, h]) => typeof h === "number" && Number.isFinite(h))
+    );
+  } catch {
+    return new Map(); // 隐私模式或数据损坏：内存 Map 兜底（当次会话内仍稳定）
+  }
+}
+
+/** 回写色相表；写失败（配额/隐私模式）仅放弃持久化，不打断渲染。 */
+function saveCourseHues() {
+  try {
+    localStorage.setItem(HUE_STORE_KEY, JSON.stringify(Object.fromEntries(state.courseHues)));
+  } catch {
+    /* 忽略：颜色仍以内存值渲染 */
+  }
+}
+
 const state = {
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1,
   selected: toDateStr(new Date()),
+  courseHues: loadCourseHues(),
   editingId: null,
   monthData: { schedules: [], assignments: [] },
   dayData: { schedules: [], assignments: [] },
@@ -119,6 +145,23 @@ async function refreshState() {
 }
 
 // ---------- 数据加载 ----------
+
+/**
+ * 汇总月/日数据中出现的课程名（assignments 并集），为未分配者补齐色相并回写。
+ * 新课程按名称排序逐个取最大空隙中点；已分配课程永不改色。
+ */
+function syncCourseHues() {
+  const names = [
+    ...state.monthData.assignments.map((a) => a.course_name),
+    ...state.dayData.assignments.map((a) => a.course_name),
+  ];
+  const fresh = assignHues(state.courseHues, names.filter((n) => n));
+  const keys = Object.keys(fresh);
+  if (!keys.length) return;
+  for (const k of keys) state.courseHues.set(k, fresh[k]);
+  saveCourseHues();
+}
+
 async function loadMonth() {
   try {
     const data = await api.getCalendar(state.year, state.month);
@@ -127,6 +170,7 @@ async function loadMonth() {
     setStatus(`日历加载失败：${err.message}`);
     state.monthData = { schedules: [], assignments: [] };
   }
+  syncCourseHues(); // 月视图课程名先入表（日数据到达时继续补齐）
   renderMonth();
 }
 
@@ -148,6 +192,7 @@ async function loadDay() {
     if (gen !== loadDayGen) return;
     state.dayData = { schedules: [], assignments: [] };
   }
+  syncCourseHues(); // 月+日课程名并集补齐色相，保证本页 chip 一律有稳定颜色
   renderDay();
 }
 
@@ -215,7 +260,11 @@ function renderMonth() {
   reportFit();
 }
 
-/** 渲染当日列表：按当前页切片（每页 3 条），构建分页器，最后触发 fit 上报。 */
+/**
+ * 渲染当日列表：按当前页切片（每页 3 条），构建分页器，最后触发 fit 上报。
+ * BB 事务行为两行结构（第 1 行课程彩色 chip、第 2 行单行省略标题），双倍行高；
+ * 自建日程行保持原单行外观。
+ */
 function renderDay() {
   $("day-label").textContent = formatDateLabel(state.selected);
   const list = $("day-list");
@@ -247,21 +296,33 @@ function renderDay() {
     }
     const title = document.createElement("span");
     title.className = "item-title";
-    title.textContent = row.item.course_name
-      ? `【${row.item.course_name}】${row.item.title}`
-      : row.item.title;
+    title.textContent = row.item.title; // 标题只保留原文，课程名改由 chip 承载
     if (row.item.color) {
       li.style.borderLeft = `3px solid ${row.item.color}`;
       li.style.paddingLeft = "6px";
     }
-    li.append(time, title);
     if (row.kind === "assignment") {
-      li.classList.add("bb-row");
-      const tag = document.createElement("span");
-      tag.className = "tag";
-      tag.textContent = "BB";
-      tag.title = `${row.item.course_name || ""}${row.item.submitted ? " · 已提交" : ""}`;
-      li.appendChild(tag);
+      li.classList.add("bb-row"); // 2 行结构 → 双倍行高（css .bb-row）
+      const name = row.item.course_name;
+      if (name) {
+        const chip = document.createElement("span");
+        chip.className = "course-chip";
+        chip.textContent = name;
+        // 色相表由 syncCourseHues 保证已就绪；防御性兜底：缺表时按当时已占用色相取新色
+        const hue = state.courseHues.get(name) ?? hueForName(name, [...state.courseHues.values()]);
+        chip.style.background = hslColor(hue);
+        chip.style.color = contrastText(hue);
+        chip.title = `${name}${row.item.submitted ? " · 已提交" : ""}`; // 沿用原 BB 徽标 tooltip 信息
+        const main = document.createElement("div");
+        main.className = "bb-main"; // 第 1 行 chip、第 2 行标题（单行省略）
+        main.append(chip, title);
+        li.append(time, main);
+      } else {
+        li.classList.add("no-chip"); // 无课程名：标题垂直居中，仍保持 60px 高
+        li.append(time, title);
+      }
+    } else {
+      li.append(time, title);
     }
     li.addEventListener("click", () => openItemOverview(row.kind, row.item));
     list.appendChild(li);

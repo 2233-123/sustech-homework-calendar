@@ -120,15 +120,28 @@ body {
 .day-list li {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 8px; border-radius: 9px; cursor: pointer;
+  min-height: 30px; /* 常规行基线：BB 行为其 2 倍（60px） */
 }
 .day-list li:hover { background: var(--accent-soft); }
-.day-list li.bb-row { cursor: pointer; }
+/* BB 事务行：两行结构（chip 行 + 标题行），高度 = 常规行 × 2 */
+.day-list li.bb-row {
+  cursor: pointer; min-height: 60px;
+  align-items: flex-start; padding-top: 8px; padding-bottom: 8px;
+}
 .day-list li.bb-row:hover { background: rgba(124, 58, 237, .07); }
+/* 无课程名：不渲染 chip，标题垂直居中（高度仍 60px） */
+.day-list li.bb-row.no-chip { align-items: center; padding-top: 6px; padding-bottom: 6px; }
 .item-time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; min-width: 42px; }
 .item-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag {
-  font-size: 11px; color: var(--bb); border: 1px solid rgba(124, 58, 237, .4);
-  border-radius: 6px; padding: 0 5px; line-height: 16px;
+/* BB 行右侧纵向容器：第 1 行 chip、第 2 行标题（gap 3px） */
+.bb-main { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.bb-main .item-title { flex: 1; min-width: 0; }
+/* 课程彩色圆角标签：背景/文字色由 lib/colors.js 按课程名内联设置，同课程恒定 */
+.course-chip {
+  display: inline-block; align-self: flex-start; max-width: 100%;
+  padding: 1px 8px; border-radius: 7px;
+  font-size: 11px; font-weight: 600; line-height: 17px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .empty-hint { color: var(--muted); font-size: 12px; padding: 6px 8px; }
 
