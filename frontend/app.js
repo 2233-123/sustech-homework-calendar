@@ -633,10 +633,29 @@ function bind() {
     if (window.hwShell) window.hwShell.setWindowScale(p);
     scheduleAnchor();
   };
+  // 低档位下设置卡片可视高度收缩，滑条可能落到折叠线之外：仅滚动卡片内部保持其可见
+  // （与窗口锚定解耦：这里动 card.scrollTop，锚定动窗口位置）
+  function ensureScaleVisible() {
+    const modal = $("modal-settings");
+    if (!modal || modal.hidden) return false;
+    const card = modal.querySelector(".modal-card");
+    if (!card) return false;
+    const cr = card.getBoundingClientRect();
+    const sr = scaleSlider.getBoundingClientRect();
+    const margin = 10;
+    let delta = 0;
+    if (sr.top < cr.top + margin) delta = sr.top - (cr.top + margin);
+    else if (sr.bottom > cr.bottom - margin) delta = sr.bottom - (cr.bottom - margin);
+    if (!delta) return false;
+    const max = card.scrollHeight - card.clientHeight;
+    card.scrollTop = Math.min(Math.max(card.scrollTop + delta, 0), Math.max(0, max));
+    return true;
+  }
   scaleSlider.addEventListener("input", () => {
     updateScaleReadout();
     const p = Number(scaleSlider.value) || 100;
     setCompact(p);
+    ensureScaleVisible();
     const now = Date.now();
     if (now - scaleIpcAt > 60) {
       if (scaleTimer) {
@@ -719,6 +738,7 @@ function bind() {
   function tickAnchor() {
     anchorTimer = null;
     if (!anchor) return;
+    ensureScaleVisible(); // 拖到低档位时卡片收缩，及时把滑条滚回可视区
     if (!anchorBusy) {
       correctAnchor().finally(() => {
         if (anchor) anchorTimer = setTimeout(tickAnchor, 12);
@@ -738,6 +758,7 @@ function bind() {
     }
   }
   scaleSlider.addEventListener("pointerdown", async () => {
+    ensureScaleVisible();
     anchor = await readAnchor();
     scheduleAnchor();
   });
