@@ -24,7 +24,7 @@
 | 外壳 | Electron（无边框窗口，spawn 后端并解析 stdout `PORT=`） |
 | 数据 | `%APPDATA%\作业日程\`：`config.json` / `data.db`(SQLite) / `credentials.bin`(DPAPI) |
 
-设计文档与实施计划见 `docs/superpowers/`（含 rev2 体验改进设计案与实测记录）。
+设计文档与实施计划见 `docs/superpowers/`（含 rev2–rev6 各版本改进设计案与实测记录）。
 
 ## 项目结构
 
@@ -78,7 +78,7 @@ py -3.11 -m venv .venv
 
 # 测试
 .\.venv\Scripts\python -m pytest                              # 120 用例
-node --test "frontend/tests/**/*.test.js"                     # 21 用例
+node --test "frontend/tests/**/*.test.js"                     # 25 用例
 
 # 外壳（开发态自动拉起后端）
 cd electron; npm i; npm start
