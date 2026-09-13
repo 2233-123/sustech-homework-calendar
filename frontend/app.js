@@ -365,6 +365,13 @@ function fillSelect(sel, max) {
   }
 }
 
+function updateScaleReadout() {
+  const p = Number($("s-scale").value) || 100;
+  const w = Math.round((408 * p) / 100);
+  const h = Math.round((760 * p) / 100);
+  $("s-scale-val").textContent = `${p}%（${w}×${h}）`;
+}
+
 async function openSettings() {
   $("settings-msg").textContent = "";
   state.remindDirty = [false, false];
@@ -391,6 +398,8 @@ async function openSettings() {
     $("s-opacity").value =
       typeof cfg.opacity === "number" ? Math.min(1, Math.max(0.3, cfg.opacity)) : 0.95;
     $("s-opacity-val").textContent = Math.round(Number($("s-opacity").value) * 100) + "%";
+    $("s-scale").value = String(Math.min(150, Math.max(40, Math.round(Number(cfg.window_scale) || 100))));
+    updateScaleReadout();
     let autostart = !!cfg.autostart;
     if (window.hwShell) {
       try {
@@ -429,6 +438,7 @@ async function saveSettings() {
     bb_remind_defaults: leads,
     always_on_top: $("s-ontop").checked,
     opacity: Math.min(1, Math.max(0.3, Number($("s-opacity").value) || 0.95)),
+    window_scale: Number($("s-scale").value) || 100,
     autostart: $("s-autostart").checked,
     remind_popup: $("s-popup").value,
   };
@@ -440,6 +450,7 @@ async function saveSettings() {
         window.hwShell.setAlwaysOnTop(payload.always_on_top),
         window.hwShell.setOpacity(payload.opacity),
         window.hwShell.setAutostart(payload.autostart),
+        window.hwShell.setWindowScale(payload.window_scale),
       ]);
       if (results.some((r) => r.status === "rejected")) {
         $("settings-msg").textContent = "已保存（部分窗口设置未生效）";
@@ -600,6 +611,17 @@ function bind() {
     if (window.hwShell) window.hwShell.setOpacity(v);
     try {
       const saved = await api.putSettings({ opacity: v });
+      if (saved) state.settings = saved;
+    } catch {
+      /* 写穿失败不打断；「保存」仍可统一提交 */
+    }
+  });
+  $("s-scale").addEventListener("input", updateScaleReadout);
+  $("s-scale").addEventListener("change", async () => {
+    const p = Number($("s-scale").value) || 100;
+    if (window.hwShell) window.hwShell.setWindowScale(p);
+    try {
+      const saved = await api.putSettings({ window_scale: p });
       if (saved) state.settings = saved;
     } catch {
       /* 写穿失败不打断；「保存」仍可统一提交 */

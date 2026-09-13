@@ -1,5 +1,5 @@
 // 作业日程 — Electron 外壳主进程
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, Notification, dialog, shell } = require("electron");
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, Notification, dialog, shell, screen } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -7,6 +7,8 @@ const fs = require("node:fs");
 const BACKEND_READY_TIMEOUT_MS = 120000;
 const WINDOW_WIDTH = 408;
 const WINDOW_HEIGHT = 760;
+const SCALE_MIN = 40;
+const SCALE_MAX = 150;
 
 let backendProc = null;
 let mainWindow = null;
@@ -24,6 +26,18 @@ function debounce(fn, ms) {
 
 function repoRoot() {
   return path.resolve(__dirname, "..");
+}
+
+function clampScale(v) {
+  return Math.min(SCALE_MAX, Math.max(SCALE_MIN, Math.round(Number(v) || 100)));
+}
+
+function scaledSize(scale, workArea) {
+  const p = clampScale(scale);
+  let w = Math.round((WINDOW_WIDTH * p) / 100);
+  let h = Math.round((WINDOW_HEIGHT * p) / 100);
+  const f = Math.min(1, workArea.width / w, workArea.height / h);
+  return { width: Math.round(w * f), height: Math.round(h * f) };
 }
 
 function backendCommand() {
@@ -100,9 +114,10 @@ async function loadWindowPrefs(port) {
         cfg.window_pos.every(Number.isFinite)
           ? cfg.window_pos
           : null,
+      windowScale: clampScale(cfg.window_scale),
     };
   } catch {
-    return { alwaysOnTop: true, opacity: 0.95, windowPos: null };
+    return { alwaysOnTop: true, opacity: 0.95, windowPos: null, windowScale: 100 };
   }
 }
 
@@ -122,9 +137,14 @@ async function saveWindowPos() {
 
 function createWindow(port, prefs) {
   const [x, y] = prefs.windowPos || [undefined, undefined];
+  const disp =
+    Array.isArray(prefs.windowPos) && prefs.windowPos.every(Number.isFinite)
+      ? screen.getDisplayNearestPoint({ x: prefs.windowPos[0], y: prefs.windowPos[1] })
+      : screen.getPrimaryDisplay();
+  const { width, height } = scaledSize(prefs.windowScale, disp.workArea);
   mainWindow = new BrowserWindow({
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
+    width,
+    height,
     x,
     y,
     useContentSize: true,
@@ -207,6 +227,18 @@ function registerIpc() {
     const u = String(url || "");
     if (!/^https:\/\/bb\.sustech\.edu\.cn\//.test(u)) return false; // 仅允许 BB 域名
     return shell.openExternal(u).then(() => true, () => false);
+  });
+  ipcMain.handle("shell:set-window-scale", (_e, p) => {
+    if (!mainWindow) return { ok: false };
+    const scale = clampScale(p);
+    const wa = screen.getDisplayMatching(mainWindow.getBounds()).workArea;
+    const { width, height } = scaledSize(scale, wa);
+    mainWindow.setContentSize(width, height);
+    const b = mainWindow.getBounds();
+    const x = Math.min(Math.max(b.x, wa.x), wa.x + wa.width - b.width);
+    const y = Math.min(Math.max(b.y, wa.y), wa.y + wa.height - b.height);
+    if (x !== b.x || y !== b.y) mainWindow.setPosition(x, y);
+    return { ok: true, scale, width, height };
   });
 }
 

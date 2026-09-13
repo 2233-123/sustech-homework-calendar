@@ -20,6 +20,7 @@ DEFAULT_CONFIG = {
     "opacity": 0.95,
     "autostart": False,
     "window_pos": None,
+    "window_scale": 100,
     "port": 0,
     "term_id": None,
 }
