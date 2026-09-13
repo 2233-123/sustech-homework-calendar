@@ -255,7 +255,7 @@ function createWindow(port, prefs) {
   lastContentH = Math.round(bounds.height / Math.max(scaleCurrent / 100, MIN_ZOOM)); // 近似初值，首个 fit-height 会校正
   mainWindow.setOpacity(prefs.opacity);
   mainWindow.loadURL(`http://127.0.0.1:${port}/`);
-  // 先不 show：等首次 fit-height 上报再显示（1.2s 超时兜底），避免"先大后缩"闪烁
+  // 先不 show：等首次 fit-height 上报再显示（3s 超时兜底），避免"先大后缩"闪烁
   firstShowTimer = setTimeout(() => {
     firstShowTimer = null; // M2：清空兜底定时器，避免慢启动后所有 fit 永久走 snap
     firstFitDone = true;
