@@ -86,37 +86,62 @@ function reportFit() {
 // 后端端口每次启动随机 → origin 变化 → localStorage 会失效；因此色表存后端配置的
 // course_hues 键（随 %APPDATA%\作业日程\config.json 落盘，与端口/origin 无关）。
 const HUE_SAVE_DEBOUNCE_MS = 400;
-let hueSaveTimer = null;
-let hueSavePending = false;
+let huesHydrated = false; // 仅当成功从服务端读到设置后才置 true（N1 落盘门控）
+let hueSaveTimer = null; // 防抖定时器
+let hueSaveSeq = 0; // 调度代数：每次 scheduleHueSave 自增，标识"最新一轮改动"
+let hueSaveSent = 0; // 已起飞请求覆盖到的代数（seq > sent ⇒ 有新改动未落盘）
+let hueSaveInFlight = false; // 在途门：同一时刻至多一个 PUT，避免旧包后到覆盖新值
 
-/** 把配置中的 course_hues（dict）并入内存表；仅接受有限数字，已有键不改色。 */
+/**
+ * 把配置中的 course_hues（dict）并入内存表；仅接受有限数字。
+ * 合并语义：**服务端值优先于同名的会话内存值**（服务端为准）；会话独有的名字保留；
+ * 缺失的名字随后由 syncCourseHues 按最大空隙补齐并防抖落盘。
+ */
 function hydrateCourseHues(raw) {
   if (!raw || typeof raw !== "object") return;
   for (const [name, hue] of Object.entries(raw)) {
-    if (name && typeof hue === "number" && Number.isFinite(hue) && !state.courseHues.has(name)) {
-      state.courseHues.set(name, hue);
+    if (name && typeof hue === "number" && Number.isFinite(hue)) {
+      state.courseHues.set(name, hue); // 覆盖同名会话值（服务端优先）
     }
   }
 }
 
 /**
  * 防抖落盘（~400ms）：仅提交 course_hues 一个键——后端 update_config 为 patch 合并
- * 语义，不覆盖其他设置键；失败仅保留内存态（pending 不落），下次变化时重试。
+ * 语义，不覆盖其他设置键。
+ * N1 门控：仅在成功从服务端读过设置（huesHydrated）后才允许写入；否则内存表可能只是
+ * "空表 + 少量新名字"，全表 PUT 会覆盖服务端已存条目并重排颜色。渲染不受影响。
  */
 function scheduleHueSave() {
-  hueSavePending = true;
+  if (!huesHydrated) return; // 未水合：只渲染内存色，不落盘
+  hueSaveSeq += 1;
   if (hueSaveTimer) clearTimeout(hueSaveTimer);
-  hueSaveTimer = setTimeout(async () => {
-    hueSaveTimer = null;
-    if (!hueSavePending) return;
-    try {
-      const saved = await api.putSettings({ course_hues: Object.fromEntries(state.courseHues) });
-      hueSavePending = false;
-      if (saved) state.settings = saved;
-    } catch {
-      /* 保留 pending：下次 syncCourseHues 有新增时再次调度 */
-    }
-  }, HUE_SAVE_DEBOUNCE_MS);
+  hueSaveTimer = setTimeout(runHueSave, HUE_SAVE_DEBOUNCE_MS);
+}
+
+/**
+ * 执行一轮落盘（提交当前内存表快照）。
+ * 不变量：同一时刻至多一个 PUT 在途；在途期间到达的新调度不会丢失——在途请求的
+ * finally 发现 seq > sent 会立刻补一轮。旧请求的成功回包不改变调度状态，故不会吞掉
+ * 新一轮保存（N2 交错：t0 调度 A → t400 PUT#1 在途 → t405 新增 B 调度 → t805 必发 PUT#2）。
+ * 失败：不推进任何状态、不忙等重试，仅保留内存态，等下一次变化重新调度。
+ */
+async function runHueSave() {
+  hueSaveTimer = null;
+  if (hueSaveInFlight) return; // 在途完成后按 seq/sent 对比自行补齐
+  const seq = hueSaveSeq;
+  hueSaveSent = seq;
+  hueSaveInFlight = true;
+  try {
+    const saved = await api.putSettings({ course_hues: Object.fromEntries(state.courseHues) });
+    // 过期回包（期间又有新调度）不覆盖更新的本地设置视图
+    if (saved && hueSaveSeq === seq) state.settings = saved;
+  } catch {
+    /* 失败：保留内存态；下次 syncCourseHues 有新增时再次调度 */
+  } finally {
+    hueSaveInFlight = false;
+    if (hueSaveSeq > hueSaveSent && !hueSaveTimer) hueSaveTimer = setTimeout(runHueSave, 0);
+  }
 }
 
 const state = {
@@ -591,7 +616,8 @@ async function openSettings() {
   try {
     const cfg = await api.getSettings();
     state.settings = cfg;
-    hydrateCourseHues(cfg.course_hues); // 幂等补齐（启动时配置读取失败后的补救路径）
+    huesHydrated = true; // 幂等补读成功：同样开闸（N1；启动时读取失败后的补救路径）
+    hydrateCourseHues(cfg.course_hues);
     $("s-interval").value = cfg.refresh_interval_min ?? 30;
     $("s-bb-remind").checked = !!cfg.bb_remind_enabled;
     const defs = (Array.isArray(cfg.bb_remind_defaults) ? cfg.bb_remind_defaults : []).slice(0, 2);
@@ -680,9 +706,11 @@ async function saveSettings() {
 async function refreshSettings() {
   try {
     state.settings = await api.getSettings();
+    huesHydrated = true; // 服务端设置已成功读取：开闸允许色表落盘（N1）
     hydrateCourseHues(state.settings.course_hues); // 色表随配置载入（首帧渲染前调用）
   } catch {
-    /* 保持默认：色表退化为内存态，仍可渲染（不落盘） */
+    /* 读取失败：保持内存态、门控保持关闭——渲染照常（内存色），但本轮不落盘，
+       避免"空表 + 新名字"的全表 PUT 覆盖服务端已存条目（N1） */
   }
 }
 
