@@ -44,11 +44,13 @@ CREATE TABLE IF NOT EXISTS setting (
 );
 
 CREATE TABLE IF NOT EXISTS reminder_log (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
   kind       TEXT    NOT NULL,
   ref_id     INTEGER NOT NULL,
   offset_sec INTEGER NOT NULL,
+  fire_at    TEXT    NOT NULL,
   fired_at   TEXT    NOT NULL,
-  UNIQUE(kind, ref_id, offset_sec)
+  UNIQUE(kind, ref_id, offset_sec, fire_at)
 );
 
 CREATE INDEX IF NOT EXISTS idx_schedule_start ON schedule(start_at);
@@ -75,7 +77,35 @@ class Database:
         self._conn.row_factory = sqlite3.Row
         with self._lock:
             self._conn.executescript(SCHEMA)
+            self._migrate_reminder_log()
             self._conn.commit()
+
+    def _migrate_reminder_log(self) -> None:
+        """旧版 reminder_log（无 fire_at 列）→ 新结构；保留 fired_at 历史。
+
+        幂等：以 PRAGMA table_info 判断列是否存在，已迁移则直接返回。
+        旧行的 fire_at 置 ''（旧键不含触发时刻）；此后由 last_fired_at 抑制更早时刻的补发。
+        """
+        cols = {row["name"] for row in self._conn.execute("PRAGMA table_info(reminder_log)")}
+        if "fire_at" in cols:
+            return
+        self._conn.executescript(
+            """
+            ALTER TABLE reminder_log RENAME TO reminder_log_old;
+            CREATE TABLE reminder_log (
+              id         INTEGER PRIMARY KEY AUTOINCREMENT,
+              kind       TEXT    NOT NULL,
+              ref_id     INTEGER NOT NULL,
+              offset_sec INTEGER NOT NULL,
+              fire_at    TEXT    NOT NULL,
+              fired_at   TEXT    NOT NULL,
+              UNIQUE(kind, ref_id, offset_sec, fire_at)
+            );
+            INSERT INTO reminder_log (kind, ref_id, offset_sec, fire_at, fired_at)
+              SELECT kind, ref_id, offset_sec, '', fired_at FROM reminder_log_old;
+            DROP TABLE reminder_log_old;
+            """
+        )
 
     # ---------- 日程 ----------
     def add_schedule(self, *, title, start_at, end_at=None, all_day=0,
@@ -209,21 +239,36 @@ class Database:
             self._conn.commit()
 
     # ---------- 提醒日志 ----------
-    def was_fired(self, kind: str, ref_id: int, offset_sec: int) -> bool:
+    def was_fired(self, kind: str, ref_id: int, offset_sec: int, fire_at: str = "") -> bool:
+        """该 (kind, ref_id, offset_sec, fire_at) 是否已触发过（精确匹配）。"""
         with self._lock:
             row = self._conn.execute(
-                "SELECT 1 FROM reminder_log WHERE kind=? AND ref_id=? AND offset_sec=?",
-                (kind, ref_id, offset_sec),
+                "SELECT 1 FROM reminder_log"
+                " WHERE kind=? AND ref_id=? AND offset_sec=? AND fire_at=?",
+                (kind, ref_id, offset_sec, fire_at),
             ).fetchone()
         return row is not None
 
-    def mark_fired(self, kind: str, ref_id: int, offset_sec: int, fired_at: str | None = None) -> None:
+    def mark_fired(
+        self, kind: str, ref_id: int, offset_sec: int, fire_at: str = "", fired_at: str | None = None
+    ) -> None:
+        """登记一次触发；(kind, ref_id, offset_sec, fire_at) 唯一，重复插入被忽略。"""
         with self._lock:
             self._conn.execute(
-                "INSERT OR IGNORE INTO reminder_log (kind, ref_id, offset_sec, fired_at) VALUES (?,?,?,?)",
-                (kind, ref_id, offset_sec, fired_at or _now()),
+                "INSERT OR IGNORE INTO reminder_log"
+                " (kind, ref_id, offset_sec, fire_at, fired_at) VALUES (?,?,?,?,?)",
+                (kind, ref_id, offset_sec, fire_at, fired_at or _now()),
             )
             self._conn.commit()
+
+    def last_fired_at(self, kind: str, ref_id: int) -> str | None:
+        """该对象最近一次触发时间（MAX(fired_at)）；从未触发返回 None。"""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT MAX(fired_at) AS m FROM reminder_log WHERE kind=? AND ref_id=?",
+                (kind, ref_id),
+            ).fetchone()
+        return row["m"] if row and row["m"] else None
 
     def close(self) -> None:
         with self._lock:
