@@ -124,7 +124,7 @@ function scheduleHueSave() {
  * 不变量：同一时刻至多一个 PUT 在途；在途期间到达的新调度不会丢失——在途请求的
  * finally 发现 seq > sent 会立刻补一轮。旧请求的成功回包不改变调度状态，故不会吞掉
  * 新一轮保存（N2 交错：t0 调度 A → t400 PUT#1 在途 → t405 新增 B 调度 → t805 必发 PUT#2）。
- * 失败：不推进任何状态、不忙等重试，仅保留内存态，等下一次变化重新调度。
+ * 失败：sent 已在起飞时推进（失败不回滚、不忙等重试），仅保留内存态，等下一次变化重新调度。
  */
 async function runHueSave() {
   hueSaveTimer = null;
