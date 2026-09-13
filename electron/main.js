@@ -54,6 +54,11 @@ function scaledSize(scale, workArea) {
   return { width: Math.round(w * f), height: Math.round(h * f) };
 }
 
+/**
+ * 把 bounds 钳制到显示器工作区：先限宽高，再限 x/y（保持边界不被越出）。
+ * @param {{x:number,y:number,width:number,height:number}} bounds
+ * @param {{x:number,y:number,width:number,height:number}} wa workArea
+ */
 function clampBoundsToWorkArea(bounds, wa) {
   const width = Math.min(bounds.width, wa.width);
   const height = Math.min(bounds.height, wa.height);
@@ -83,6 +88,10 @@ function stopScaleAnim() {
   }
 }
 
+/**
+ * 启动/继续平滑循环：每 16ms 让 (scale, height) 各向目标逼近 35%，
+ * 两量都 <0.5 时落定、落盘并停止。收敛后一次性 saveWindowPos（避免逐帧写盘）。
+ */
 function startScaleAnim() {
   if (scaleTimer) return;
   scaleTimer = setInterval(() => {
@@ -193,6 +202,10 @@ async function loadWindowPrefs(port) {
   }
 }
 
+/**
+ * 把窗口当前位置写回配置（window_pos）。位置未变则不重复 PUT（N3）。
+ * 副作用：网络 PUT；失败忽略（位置记忆非关键路径）。
+ */
 async function saveWindowPos() {
   if (!mainWindow || !backendPort) return;
   const [x, y] = mainWindow.getPosition();
@@ -209,6 +222,11 @@ async function saveWindowPos() {
   }
 }
 
+/**
+ * 创建主窗口：按缩放计算内容尺寸、按记忆位置（无则工作区居中）放置；
+ * 先 `show:false`，等渲染层首次 fit-height 后再显示（3s 超时兜底），避免闪烁。
+ * @param {number} port 后端端口 @param {object} prefs loadWindowPrefs 结果
+ */
 function createWindow(port, prefs) {
   const hasPos = Array.isArray(prefs.windowPos) && prefs.windowPos.every(Number.isFinite);
   const disp = hasPos
@@ -283,6 +301,10 @@ function toggleWindow() {
   else mainWindow.show();
 }
 
+/**
+ * 贴边收起：记忆主窗内容 bounds → 隐藏主窗 → 在显示器右缘创建 16×120 边缘条。
+ * 边缘条获得焦点即触发 restoreFromEdge（点击唤出）。已收起或不可见时返回 false。
+ */
 function hideToEdge() {
   if (!mainWindow || !mainWindow.isVisible() || edgeTab) return false;
   stopScaleAnim(); // 收起前让平滑循环落定，避免隐藏时仍在改尺寸
@@ -332,6 +354,10 @@ function hideToEdge() {
   return true;
 }
 
+/**
+ * 从边缘条唤出：销毁边缘条 → 还原收起前位置 → 重放当前目标尺寸（修正隐藏期间
+ * 在途高度未落定）→ 显示并聚焦。
+ */
 function restoreFromEdge() {
   if (edgeTab) {
     const tab = edgeTab;

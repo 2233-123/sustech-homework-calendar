@@ -7,6 +7,8 @@ import threading
 
 
 class EventBus:
+    """进程内发布/订阅：每个订阅者一个 `queue.Queue`，队列满时丢弃该订阅者的本条事件。"""
+
     def __init__(self, max_queue: int = 100):
         self._lock = threading.Lock()
         self._subscribers: list = []

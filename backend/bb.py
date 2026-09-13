@@ -103,6 +103,7 @@ def utc_iso_to_local_iso(due_utc: str | None) -> str | None:
 
 
 def get_uid(bb: "BBSession") -> str:
+    """当前登录用户 id（用于后续 users/{uid}/courses）。"""
     return bb.get_json("/learn/api/public/v1/users/me")["id"]
 
 
@@ -147,6 +148,7 @@ def get_assignment_columns(bb: "BBSession", course_id: str) -> list:
 
 
 def get_attempts(bb: "BBSession", course_id: str, column_id: str) -> list:
+    """某评分列的提交尝试列表（空列表 = 未提交；取最新一次判断状态/分数）。"""
     data = bb.get_json(
         f"/learn/api/public/v1/courses/{course_id}/gradebook/columns/{column_id}/attempts"
     )

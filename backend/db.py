@@ -63,6 +63,12 @@ def _now() -> str:
 
 
 class Database:
+    """SQLite 数据层。
+
+    线程模型：`sqlite3` 连接以 `check_same_thread=False` 创建，所有读写都在实例锁内
+    串行化，可被 Flask 线程与后台调度线程共享（勿按线程新建连接）。
+    """
+
     def __init__(self, path):
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
@@ -105,6 +111,7 @@ class Database:
         return dict(row) if row else None
 
     def list_schedules(self, start: str, end: str) -> list:
+        """[start, end) 内按开始时间升序的日程（ISO 字符串比较即时间比较）。"""
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM schedule WHERE start_at >= ? AND start_at < ? ORDER BY start_at",
@@ -149,6 +156,7 @@ class Database:
         return added, len(records) - added
 
     def list_assignments(self, start: str, end: str) -> list:
+        """[start, end) 内按截止时间升序、且 due_at 非空的作业。"""
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM assignment WHERE due_at IS NOT NULL"

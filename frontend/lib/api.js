@@ -1,4 +1,12 @@
 // REST 客户端：fetch 可注入以便零依赖单测
+//
+// 约定：所有方法返回解析后的 JSON；HTTP 非 2xx 时抛 Error，附带
+//   err.code   —— 后端返回的 {error} 字段（无则 "http_error"）
+//   err.status —— HTTP 状态码
+/**
+ * @param {typeof fetch} [fetchImpl=globalThis.fetch] 可注入的 fetch（测试替身）
+ * @returns {Object} 与后端 /api/* 一一对应的方法集合
+ */
 export function createApi(fetchImpl = globalThis.fetch) {
   async function request(method, url, body) {
     const opts = { method, headers: {} };

@@ -48,6 +48,7 @@ def login(sid: str, password: str, session=None, timeout: int = TIMEOUT,
 
 
 def _login_once(sid: str, password: str, session=None, timeout: int = TIMEOUT) -> dict:
+    """单次 CAS 登录；失败抛 InvalidCredentials/NetworkError，不重试。"""
     sess = session if session is not None else requests.Session()
     cas_url = f"{CAS_BASE}?service={quote(BB_SERVICE_URL, safe='')}"
     headers = {"User-Agent": UA}

@@ -13,6 +13,13 @@ from backend.service import NotAuthenticated, SyncInProgress
 
 
 def create_app(service, bus, *, frontend_dir=None) -> Flask:
+    """构建 Flask 应用：REST + SSE + 前端静态托管。
+
+    @param service: Service 实例（业务编排）
+    @param bus: EventBus 实例（SSE 广播）
+    @param frontend_dir: 前端静态目录；默认仓库根的 frontend/
+    @return: 已注册路由的 Flask app
+    """
     frontend = Path(frontend_dir) if frontend_dir else Path(__file__).resolve().parent.parent / "frontend"
     app = Flask(__name__, static_folder=str(frontend), static_url_path="")
     app.json.ensure_ascii = False

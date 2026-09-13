@@ -1,13 +1,21 @@
 // 月视图网格与月份运算（纯函数）
 import { toDateStr } from "./fmt.js";
 
+/**
+ * 月份加减（自动跨年）。
+ * @param {number} year @param {number} month 1–12 @param {number} delta @returns {{year:number, month:number}}
+ */
 export function addMonths(year, month, delta) {
   const idx = year * 12 + (month - 1) + delta;
   return { year: Math.floor(idx / 12), month: (idx % 12) + 1 };
 }
 
+/**
+ * 生成月视图网格：周一起始、恒定 6 行 × 7 列（含前后补位），保证组件高度稳定。
+ * @param {number} year @param {number} month 1–12 @param {string} [todayStr] 'YYYY-MM-DD'
+ * @returns {Array<Array<{date:string, day:number, inMonth:boolean, isToday:boolean}>>}
+ */
 export function monthGrid(year, month, todayStr = toDateStr(new Date())) {
-  // 周一起始；恒定 6 行 × 7 列（含前后补位），保持组件高度稳定
   const offset = (new Date(year, month - 1, 1).getDay() + 6) % 7; // 周一 = 0
   const start = new Date(year, month - 1, 1 - offset);
   const weeks = [];

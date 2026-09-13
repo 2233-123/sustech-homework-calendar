@@ -5,6 +5,11 @@ import { addMonths, monthGrid } from "./lib/cal.js";
 import { formatDateLabel, formatDateTime, formatLead, formatTime, toDateStr } from "./lib/fmt.js";
 import { clampPage, pageCount } from "./lib/page.js";
 
+// 数据流：init() → 拉取 state/月/日/设置 → 渲染（renderMonth/renderDay）；
+// 交互（选日期/翻页/增删日程/设置/缩放）改 state 后重渲染并上报 reportFit()；
+// reportFit 把 #app 内容高经 hwShell.fitHeight 交给 Electron 主进程驱动窗口自适应；
+// SSE（connectSSE）在同步完成/登录变化/提醒时刷新或弹气泡。
+
 const api = createApi();
 const $ = (id) => document.getElementById(id);
 const PAGE_SIZE = 3;
@@ -47,6 +52,10 @@ function scheduleOverflowTrail() {
   }, 150);
 }
 
+/**
+ * 上报内容高度以驱动窗口自适应（值去重 + 50ms 节流）。
+ * 副作用：按需切换 body.overflowing；调用 hwShell.fitHeight(h)。
+ */
 function reportFit() {
   if (!uiReady) return;
   const run = () => {
@@ -121,7 +130,13 @@ async function loadMonth() {
   renderMonth();
 }
 
+// 代际令牌：快速连续切日期时，旧请求的响应可能后到；只允许最新代际渲染，
+// 否则会出现「标签是新日期、内容还是旧日期」（竞态）。
 let loadDayGen = 0;
+/**
+ * 加载选中日的事务并按页渲染日列表。
+ * 副作用：更新 state.dayPage/state.dayData，触发 renderDay 与 fit 上报。
+ */
 async function loadDay() {
   const gen = ++loadDayGen; // I2：代际守卫，快速连续切日期时丢弃过期响应
   state.dayPage = 0;
@@ -144,6 +159,7 @@ function selectDate(date) {
 }
 
 // ---------- 渲染 ----------
+/** 渲染月视图：每格两行结构（数字 + 常驻圆点占位），圆点 sched/bb 两色、各 3 枚封顶。 */
 function renderMonth() {
   $("month-label").textContent = `${state.year} 年 ${state.month} 月`;
   const dots = new Map();
@@ -199,6 +215,7 @@ function renderMonth() {
   reportFit();
 }
 
+/** 渲染当日列表：按当前页切片（每页 3 条），构建分页器，最后触发 fit 上报。 */
 function renderDay() {
   $("day-label").textContent = formatDateLabel(state.selected);
   const list = $("day-list");
@@ -253,6 +270,7 @@ function renderDay() {
   reportFit();
 }
 
+/** 构建/更新分页器：页数 ≤1 隐藏；圆点点击跳页；首/末页对应箭头禁用。 */
 function renderPager(pageCount, page) {
   const pager = $("day-pager");
   const dots = $("pager-dots");
@@ -397,6 +415,12 @@ async function deleteSchedule() {
 }
 
 // ---------- 事务概览 ----------
+/**
+ * 由 BB 事务生成外链。
+ * DB 中的 id 是 normalize_bb_id 处理后的裸 id（已去 `_`/`_1`），这里还原为 BB 的 `_<id>_1`；
+ * 有 content_id 用内容页，否则退回课程主页。
+ * @param {object} item @returns {string|null} 无 course_id 返回 null
+ */
 function bbUrl(item) {
   if (!item.course_id) return null;
   // DB 中 id 为 normalize_bb_id 处理后的裸 id（去 `_`/`_1`），此处还原为 BB 的 `_<id>_1` 形式
@@ -413,6 +437,12 @@ function openExternal(url) {
   else window.open(url, "_blank", "noopener");
 }
 
+/**
+ * 打开事务概览弹层（日程/BB 共用）。
+ * 字段以 createElement + textContent 构建（外部字符串不拼 innerHTML）；
+ * 按 kind 决定可编辑（日程）与可在 BB 打开（作业）。
+ * @param {"schedule"|"assignment"} kind @param {object} item
+ */
 function openItemOverview(kind, item) {
   state.overview = { kind, item };
   $("item-title").textContent = item.title;
@@ -823,6 +853,9 @@ function bind() {
   });
 
   // ---- 光标锚定：拖动缩放条时保持「滑条行」屏幕位置不动 ----
+  // 数学：滑条行中心的「屏幕坐标」= 窗口左上角(DP) + 元素视口坐标 × zoom，
+  // 其中 zoom = 窗口宽 / innerWidth（把 CSS px 换算为窗口 DIP）。pointerdown 记下该点，
+  // 每 12ms 重算并 nudge 窗口使差值归零；nudge 只传整数（亚像素会抖动）。
   let anchor = null;
   let anchorBusy = false;
   let anchorTimer = null;
@@ -939,6 +972,7 @@ function bind() {
   window.addEventListener("focus", onVisible);
 }
 
+/** 启动流程：装配事件 → 首轮数据渲染 → 置 uiReady 并首报 fit → 订阅 SSE。 */
 async function init() {
   bind();
   fillSelect($("s-remind1-days"), 30);
