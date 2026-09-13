@@ -183,6 +183,7 @@ function createWindow(port, prefs) {
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(__dirname, "preload.js"),
+      zoomFactor: bounds.width / WINDOW_WIDTH, // 内容随窗口等比缩放，CSS 布局视口恒 ~408
     },
   });
   mainWindow.setOpacity(prefs.opacity);
@@ -327,6 +328,7 @@ function registerIpc() {
     const wa = screen.getDisplayMatching(mainWindow.getBounds()).workArea;
     const { width, height } = scaledSize(scale, wa);
     mainWindow.setContentSize(width, height);
+    mainWindow.webContents.setZoomFactor(width / WINDOW_WIDTH); // 与窗口尺寸同步，布局视口恒 ~408
     const b = mainWindow.getBounds();
     const c = clampBoundsToWorkArea(b, wa);
     if (c.x !== b.x || c.y !== b.y) {
