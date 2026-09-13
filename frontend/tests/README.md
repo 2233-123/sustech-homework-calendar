@@ -8,6 +8,7 @@
 |---|---|
 | `api.test.js` | `lib/api.js`（请求方法/URL/错误处理） |
 | `cal.test.js` | `lib/cal.js`（月网格与跨月/首日计算） |
+| `colors.test.js` | `lib/colors.js`（最大空隙分配、环距≥30°、已分配不变、对比色规则、确定性） |
 | `fmt.test.js` | `lib/fmt.js`（补零、本地解析、中文标签、提前量格式化） |
 | `page.test.js` | `lib/page.js`（页数、页码钳制） |
 | `sse.test.js` | `lib/sse.js`（事件分发与错误处理） |
@@ -20,7 +21,7 @@
 ## 运行
 
 ```powershell
-node --test "frontend/tests/**/*.test.js"   # 25 用例
+node --test "frontend/tests/**/*.test.js"   # 37 用例
 ```
 
 ## 修改注意点

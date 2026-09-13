@@ -6,8 +6,8 @@
 
 - **本地 CAS 登录**：Windows DPAPI 加密存储凭据（仅本机当前用户可解密），启动静默自动登录
 - **Blackboard 作业自动拉取**：只读同步（评分列 = 作业，含截止时间/提交状态），定时刷新 + 手动刷新
-- **月视图日历**：圆角正方形日期格（事项圆点随格缩放）；点日期展开当日列表（BB 作业标题带「【课程名】」前缀）
-- **日列表**：按条数动态高度、**窗口高度随内容自适应**（不留空白）；每页最多 3 条，超出用圆点页码 + 箭头翻页
+- **月视图日历**：圆角正方形日期格（事项圆点随格缩放）；点日期展开当日列表（BB 作业：彩色课程名圆角标签 + 双倍行高；颜色按课程区分、同课程恒定）
+- **日列表**：按条数动态高度、**窗口高度随内容自适应**（不留空白）；每页最多 3 条，超出用圆点页码 + 箭头翻页；BB 事务行为两行结构（课程标签 + 标题），高度为常规条目的 2 倍
 - **事务概览**：点击任意事务查看标题/备注/时间/提醒；BB 事务含课程名、提交状态与「在 Blackboard 中打开」外链
 - **自建日程**：标题/时间/全天/颜色/备注/提前提醒（5 分钟 — 1 天）
 - **预警弹窗**：应用内气泡（可稍后/知道了）+ 可选系统通知
@@ -24,7 +24,7 @@
 | 外壳 | Electron（无边框窗口，spawn 后端并解析 stdout `PORT=`） |
 | 数据 | `%APPDATA%\作业日程\`：`config.json` / `data.db`(SQLite) / `credentials.bin`(DPAPI) |
 
-设计文档与实施计划见 `docs/superpowers/`（含 rev2–rev6 各版本改进设计案与实测记录）。
+设计文档与实施计划见 `docs/superpowers/`（含 rev2–rev8 各版本改进设计案与实测记录）。
 
 ## 项目结构
 
@@ -40,7 +40,7 @@
 │  └─ tests/                    # pytest 用例与测试替身
 ├─ frontend/                    # 原生 ES Module 前端（零构建，由后端静态托管）
 │  ├─ app.js                    # 入口：状态、渲染、交互装配
-│  ├─ lib/                      # 纯逻辑模块：api / cal / fmt / page / sse
+│  ├─ lib/                      # 纯逻辑模块：api / cal / colors / fmt / page / sse
 │  ├─ tests/                    # node:test 单测（页面逻辑与纯函数）
 │  ├─ index.html / style.css    # 页面骨架与样式
 │  └─ package.json              # 仅供 node --test 使用（无依赖、无构建）
@@ -78,7 +78,7 @@ py -3.11 -m venv .venv
 
 # 测试
 .\.venv\Scripts\python -m pytest                              # 130 用例
-node --test "frontend/tests/**/*.test.js"                     # 25 用例
+node --test "frontend/tests/**/*.test.js"                     # 37 用例
 
 # 外壳（开发态自动拉起后端）
 cd electron; npm i; npm start
