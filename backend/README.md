@@ -29,7 +29,7 @@ SQLite 存储、配置读写与提醒判定；仅监听 `127.0.0.1` 随机端口
 
 ```powershell
 .\.venv\Scripts\python -m backend.main     # 打印 PORT=，浏览器访问即前端
-.\.venv\Scripts\python -m pytest           # 120 用例
+.\.venv\Scripts\python -m pytest           # 130 用例
 ```
 
 ## 修改注意点

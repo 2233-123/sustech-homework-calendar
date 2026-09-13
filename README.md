@@ -77,7 +77,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python -m backend.main        # 打印 PORT= 后浏览器打开即前端
 
 # 测试
-.\.venv\Scripts\python -m pytest                              # 120 用例
+.\.venv\Scripts\python -m pytest                              # 130 用例
 node --test "frontend/tests/**/*.test.js"                     # 25 用例
 
 # 外壳（开发态自动拉起后端）
