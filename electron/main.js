@@ -343,6 +343,11 @@ function restoreFromEdge() {
     preCollapseBounds = null;
     if (b) mainWindow.setContentBounds(clampBoundsToWorkArea(b, screen.getDisplayMatching(b).workArea));
     mainWindow.show();
+    // I1：唤出后重放当前目标尺寸，修正「隐藏期间在途高度未落定」导致的卡旧高/裁剪
+    stopScaleAnim();
+    scaleCurrent = scaleTarget;
+    heightCurrent = heightTarget;
+    applyScaleFrame(scaleCurrent, heightCurrent);
     mainWindow.focus();
   }
   return true;
@@ -410,15 +415,19 @@ function registerIpc() {
     if (!Number.isFinite(Hc) || Hc <= 0) return { ok: false };
     lastContentH = Hc;
     recomputeHeightTarget();
-    startScaleAnim();
     if (!firstFitDone) {
+      // M1：首个 fit 直接 snap 到目标尺寸再显示，避免"先缩后大"动画与瞬时裁剪
       firstFitDone = true;
       if (firstShowTimer) {
         clearTimeout(firstShowTimer);
         firstShowTimer = null;
       }
+      heightCurrent = heightTarget;
+      applyScaleFrame(scaleCurrent, heightCurrent);
       mainWindow.show();
+      return { ok: true, height: heightTarget };
     }
+    startScaleAnim();
     return { ok: true, height: heightTarget };
   });
   ipcMain.handle("shell:get-window-info", () => {

@@ -212,7 +212,7 @@ body {
 /* 溢出兜底：仅当工作区钳制导致内容放不下时（body.overflowing）启用文档滚动 + 6px 细滚动条 */
 body.overflowing { overflow-y: auto; }
 /* scrollbar-width:auto 仅用于覆盖全局 *{scrollbar-width:none}；auto 不抑制 ::-webkit-scrollbar，从而得到 6px 细条 */
-html:has(body.overflowing) { height: auto; overflow-y: auto; scrollbar-width: auto; }
+html:has(body.overflowing) { height: auto; overflow-y: auto; scrollbar-width: auto; scrollbar-gutter: stable; }
 html:has(body.overflowing)::-webkit-scrollbar { width: 6px; height: 6px; display: block; }
 html:has(body.overflowing)::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.62); border-radius: 3px; }
 html:has(body.overflowing)::-webkit-scrollbar-track { background: transparent; }

@@ -3,6 +3,7 @@ import { createApi } from "./lib/api.js";
 import { createSSE } from "./lib/sse.js";
 import { addMonths, monthGrid } from "./lib/cal.js";
 import { formatDateLabel, formatDateTime, formatLead, formatTime, toDateStr } from "./lib/fmt.js";
+import { clampPage, pageCount } from "./lib/page.js";
 
 const api = createApi();
 const $ = (id) => document.getElementById(id);
@@ -12,12 +13,29 @@ const PAGE_SIZE = 3;
 let lastFitH = -1;
 let lastFitAt = 0;
 let fitTimer = null;
+let overflowState = false;
+let lastClientH = -1;
+let uiReady = false;
+
+// C1：滞回（进入 >8px，退出 ≤1px）+ 仅在尺寸稳定后评估，避免滚动条↔宽度的反馈抖动
+function evaluateOverflow() {
+  const de = document.documentElement;
+  const clientH = de.clientHeight;
+  const stable = clientH === lastClientH;
+  lastClientH = clientH;
+  if (!stable) return;
+  const residual = de.scrollHeight - clientH;
+  if (!overflowState && residual > 8) overflowState = true;
+  else if (overflowState && residual <= 1) overflowState = false;
+  document.body.classList.toggle("overflowing", overflowState);
+}
+
 function reportFit() {
+  if (!uiReady) return; // M1b：文档就绪前不上报，消除内容渐进增长期的中间尺寸
   const run = () => {
     fitTimer = null;
     lastFitAt = Date.now();
-    const de = document.documentElement;
-    document.body.classList.toggle("overflowing", de.scrollHeight > de.clientHeight + 1);
+    evaluateOverflow();
     const h = Math.round($("app").offsetHeight);
     if (h !== lastFitH) {
       lastFitH = h;
@@ -35,6 +53,14 @@ function reportFit() {
     fitTimer = setTimeout(run, 50 - since);
   }
 }
+
+function markUiReady() {
+  if (uiReady) return;
+  uiReady = true;
+  requestAnimationFrame(() => requestAnimationFrame(() => reportFit()));
+}
+if (document.readyState === "complete") markUiReady();
+else window.addEventListener("load", markUiReady);
 
 const state = {
   year: new Date().getFullYear(),
@@ -85,12 +111,16 @@ async function loadMonth() {
   renderMonth();
 }
 
+let loadDayGen = 0;
 async function loadDay() {
+  const gen = ++loadDayGen; // I2：代际守卫，快速连续切日期时丢弃过期响应
   state.dayPage = 0;
   try {
     const data = await api.getDay(state.selected);
+    if (gen !== loadDayGen) return;
     state.dayData = { schedules: data.schedules || [], assignments: data.assignments || [] };
   } catch {
+    if (gen !== loadDayGen) return;
     state.dayData = { schedules: [], assignments: [] };
   }
   renderDay();
@@ -176,9 +206,8 @@ function renderDay() {
     reportFit();
     return;
   }
-  const pageCount = Math.ceil(rows.length / PAGE_SIZE);
-  if (state.dayPage >= pageCount) state.dayPage = pageCount - 1;
-  if (state.dayPage < 0) state.dayPage = 0;
+  const pc = pageCount(rows.length);
+  state.dayPage = clampPage(state.dayPage, rows.length);
   const page = state.dayPage;
   for (const row of rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)) {
     const li = document.createElement("li");
@@ -210,7 +239,7 @@ function renderDay() {
     li.addEventListener("click", () => openItemOverview(row.kind, row.item));
     list.appendChild(li);
   }
-  renderPager(pageCount, page);
+  renderPager(pc, page);
   reportFit();
 }
 
@@ -889,6 +918,14 @@ function bind() {
     renderDay();
   });
   window.addEventListener("resize", () => requestAnimationFrame(reportFit));
+  // I1 兜底：重新可见/获焦时重置去重并重报，修正隐藏期间的内容高变化
+  const onVisible = () => {
+    if (document.hidden) return;
+    lastFitH = -1;
+    reportFit();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("focus", onVisible);
 }
 
 async function init() {
