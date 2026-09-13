@@ -189,10 +189,7 @@ def create_app(service, bus, *, frontend_dir=None) -> Flask:
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
             return _error("bad_request", "请求体应为 JSON 对象", 400)
-        cfg = config.load_config()
-        cfg.update(body)
-        config.save_config(cfg)
-        return jsonify(config.load_config())
+        return jsonify(config.update_config(body))
 
     @app.get("/api/events")
     def api_events():

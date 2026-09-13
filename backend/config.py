@@ -7,9 +7,15 @@ from __future__ import annotations
 import copy
 import json
 import os
+import threading
 from pathlib import Path
 
 APP_DIR_NAME = "作业日程"
+
+# 串行化「读-改-写」配置更新：Flask threaded=True 下，多请求并发写同一份
+# 配置快照会相互覆盖（N1：saveWindowPos 的 {window_pos} 与渲染层写穿的
+# {window_scale} 在缩放钳制场景几乎同时到达，非原子 load→save 会丢更新）。
+_CONFIG_LOCK = threading.Lock()
 
 DEFAULT_CONFIG = {
     "refresh_interval_min": 30,
@@ -62,6 +68,29 @@ def load_config() -> dict:
 def save_config(cfg: dict) -> None:
     merged = copy.deepcopy(DEFAULT_CONFIG)
     merged.update({k: v for k, v in cfg.items() if k in DEFAULT_CONFIG})
-    config_path().write_text(
-        json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    path = config_path()
+    tmp = path.parent / (path.name + ".tmp")
+    try:
+        tmp.write_text(
+            json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        os.replace(tmp, path)  # 同盘原子覆盖，避免读到半写文件
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def update_config(patch: dict) -> dict:
+    """原子地 load→update→save，返回合并后的配置。
+
+    锁覆盖整个读-改-写，确保并发 patch（如 window_pos 与 window_scale）
+    不会互相吞掉对方更新；落盘仍走 save_config 的键过滤。
+    """
+    with _CONFIG_LOCK:
+        cfg = load_config()
+        cfg.update(patch)
+        save_config(cfg)
+        return load_config()
