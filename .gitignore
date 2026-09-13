@@ -8,3 +8,7 @@ node_modules/
 build/
 electron/dist/
 electron/resources/
+# 例外：electron-builder 自定义 NSIS 脚本需入库（上方的 build/ 规则会误伤 electron/build）
+!electron/build/
+electron/build/*
+!electron/build/installer.nsh

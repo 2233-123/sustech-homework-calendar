@@ -13,7 +13,15 @@
     "productName": "作业日程",
     "files": ["main.js", "preload.js", "tray.png"],
     "extraResources": [{ "from": "resources/backend", "to": "backend" }],
-    "win": { "target": ["nsis", "portable"], "icon": "icon.png" }
+    "win": { "target": ["nsis", "portable"], "icon": "icon.png" },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "runAfterFinish": true
+    }
   },
   "devDependencies": {
     "electron": "^44.3.0",
