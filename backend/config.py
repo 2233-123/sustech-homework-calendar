@@ -33,6 +33,9 @@ DEFAULT_CONFIG = {
     "window_scale": 100,
     "port": 0,
     "term_id": None,
+    # 课程名 → 色相（前端课程标签配色）。存后端配置而非浏览器 localStorage：
+    # 后端端口每次启动随机（origin 变化），localStorage 会随 origin 失效。
+    "course_hues": {},
 }
 
 

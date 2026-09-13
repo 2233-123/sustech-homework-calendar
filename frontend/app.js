@@ -82,35 +82,48 @@ function reportFit() {
   }
 }
 
-// ---------- 课程色相表（localStorage 持久化，同课程颜色永久稳定） ----------
-const HUE_STORE_KEY = "hw.courseHues.v1";
+// ---------- 课程色相表（持久化在后端 config.json，跨重启/端口变化恒定） ----------
+// 后端端口每次启动随机 → origin 变化 → localStorage 会失效；因此色表存后端配置的
+// course_hues 键（随 %APPDATA%\作业日程\config.json 落盘，与端口/origin 无关）。
+const HUE_SAVE_DEBOUNCE_MS = 400;
+let hueSaveTimer = null;
+let hueSavePending = false;
 
-/** 读取课程名 → 色相映射；无数据/损坏/隐私模式（localStorage 不可用）时退化为空 Map。 */
-function loadCourseHues() {
-  try {
-    const obj = JSON.parse(localStorage.getItem(HUE_STORE_KEY) || "{}");
-    return new Map(
-      Object.entries(obj).filter(([, h]) => typeof h === "number" && Number.isFinite(h))
-    );
-  } catch {
-    return new Map(); // 隐私模式或数据损坏：内存 Map 兜底（当次会话内仍稳定）
+/** 把配置中的 course_hues（dict）并入内存表；仅接受有限数字，已有键不改色。 */
+function hydrateCourseHues(raw) {
+  if (!raw || typeof raw !== "object") return;
+  for (const [name, hue] of Object.entries(raw)) {
+    if (name && typeof hue === "number" && Number.isFinite(hue) && !state.courseHues.has(name)) {
+      state.courseHues.set(name, hue);
+    }
   }
 }
 
-/** 回写色相表；写失败（配额/隐私模式）仅放弃持久化，不打断渲染。 */
-function saveCourseHues() {
-  try {
-    localStorage.setItem(HUE_STORE_KEY, JSON.stringify(Object.fromEntries(state.courseHues)));
-  } catch {
-    /* 忽略：颜色仍以内存值渲染 */
-  }
+/**
+ * 防抖落盘（~400ms）：仅提交 course_hues 一个键——后端 update_config 为 patch 合并
+ * 语义，不覆盖其他设置键；失败仅保留内存态（pending 不落），下次变化时重试。
+ */
+function scheduleHueSave() {
+  hueSavePending = true;
+  if (hueSaveTimer) clearTimeout(hueSaveTimer);
+  hueSaveTimer = setTimeout(async () => {
+    hueSaveTimer = null;
+    if (!hueSavePending) return;
+    try {
+      const saved = await api.putSettings({ course_hues: Object.fromEntries(state.courseHues) });
+      hueSavePending = false;
+      if (saved) state.settings = saved;
+    } catch {
+      /* 保留 pending：下次 syncCourseHues 有新增时再次调度 */
+    }
+  }, HUE_SAVE_DEBOUNCE_MS);
 }
 
 const state = {
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1,
   selected: toDateStr(new Date()),
-  courseHues: loadCourseHues(),
+  courseHues: new Map(), // 由 refreshSettings() 从配置载入（见 hydrateCourseHues）
   editingId: null,
   monthData: { schedules: [], assignments: [] },
   dayData: { schedules: [], assignments: [] },
@@ -147,8 +160,8 @@ async function refreshState() {
 // ---------- 数据加载 ----------
 
 /**
- * 汇总月/日数据中出现的课程名（assignments 并集），为未分配者补齐色相并回写。
- * 新课程按名称排序逐个取最大空隙中点；已分配课程永不改色。
+ * 汇总月/日数据中出现的课程名（assignments 并集），为未分配者补齐色相并防抖落盘。
+ * 新课程按名称排序逐个取最大空隙中点；已分配课程永不改色；无新增不写盘。
  */
 function syncCourseHues() {
   const names = [
@@ -159,7 +172,7 @@ function syncCourseHues() {
   const keys = Object.keys(fresh);
   if (!keys.length) return;
   for (const k of keys) state.courseHues.set(k, fresh[k]);
-  saveCourseHues();
+  scheduleHueSave();
 }
 
 async function loadMonth() {
@@ -308,7 +321,8 @@ function renderDay() {
         const chip = document.createElement("span");
         chip.className = "course-chip";
         chip.textContent = name;
-        // 色相表由 syncCourseHues 保证已就绪；防御性兜底：缺表时按当时已占用色相取新色
+        // 不变量：渲染前必经 syncCourseHues 补齐色表（loadMonth/loadDay 末尾调用）；
+        // 此处 ?? 兜底仅防御异常路径（配置读取失败后直接渲染），只算内存色、不落盘。
         const hue = state.courseHues.get(name) ?? hueForName(name, [...state.courseHues.values()]);
         chip.style.background = hslColor(hue);
         chip.style.color = contrastText(hue);
@@ -318,7 +332,7 @@ function renderDay() {
         main.append(chip, title);
         li.append(time, main);
       } else {
-        li.classList.add("no-chip"); // 无课程名：标题垂直居中，仍保持 60px 高
+        li.classList.add("no-chip"); // 无课程名：标题垂直居中，仍保持 66px 高（= 2×33）
         li.append(time, title);
       }
     } else {
@@ -577,6 +591,7 @@ async function openSettings() {
   try {
     const cfg = await api.getSettings();
     state.settings = cfg;
+    hydrateCourseHues(cfg.course_hues); // 幂等补齐（启动时配置读取失败后的补救路径）
     $("s-interval").value = cfg.refresh_interval_min ?? 30;
     $("s-bb-remind").checked = !!cfg.bb_remind_enabled;
     const defs = (Array.isArray(cfg.bb_remind_defaults) ? cfg.bb_remind_defaults : []).slice(0, 2);
@@ -665,8 +680,9 @@ async function saveSettings() {
 async function refreshSettings() {
   try {
     state.settings = await api.getSettings();
+    hydrateCourseHues(state.settings.course_hues); // 色表随配置载入（首帧渲染前调用）
   } catch {
-    /* 保持默认 */
+    /* 保持默认：色表退化为内存态，仍可渲染（不落盘） */
   }
 }
 
@@ -1033,7 +1049,10 @@ function bind() {
   window.addEventListener("focus", onVisible);
 }
 
-/** 启动流程：装配事件 → 首轮数据渲染 → 置 uiReady 并首报 fit → 订阅 SSE。 */
+/**
+ * 启动流程：装配事件 → 载入配置（含色表）→ 首轮数据渲染 → 置 uiReady 并首报 fit → 订阅 SSE。
+ * 配置先于数据加载：chip 首帧渲染即用持久化色相，避免"先算后换"的闪烁。
+ */
 async function init() {
   bind();
   fillSelect($("s-remind1-days"), 30);
@@ -1042,12 +1061,12 @@ async function init() {
   fillSelect($("s-remind2-hours"), 23);
   renderMonth();
   await refreshState();
+  await refreshSettings(); // 先取配置（course_hues），再渲染日列表
   await loadMonth();
   await loadDay();
   uiReady = true; // N1：数据首轮渲染完成后才允许上报 fit（避免半成品高度）
   reportFit(); // 直接首报（offsetHeight 读取强制同步布局；隐藏窗口 rAF 被节流，不能等 rAF）
   setTimeout(reportFit, 0); // 单次兜底，不再用双 rAF
-  await refreshSettings();
   if (window.ResizeObserver) new ResizeObserver(() => reportFit()).observe($("app")); // 捕获后续内容高变化
   connectSSE();
 }

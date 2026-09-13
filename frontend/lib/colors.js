@@ -1,6 +1,6 @@
 // 课程标签配色（纯函数，无 DOM）：名字 → 稳定色相 → 鲜艳 HSL 颜色 + 对比文字色。
 // 设计：新色相取"已占用色相"集合上最大空隙的中点，保证同批课程颜色尽量分散；
-// 色相由调用方持久化（app.js → localStorage），已分配课程永不改色。
+// 色相由调用方持久化（app.js → 后端 config.json 的 course_hues），已分配课程永不改色。
 
 /**
  * 在已占用色相集合上取最大空隙的中点作为新色相。
@@ -10,7 +10,13 @@
  * @returns {number} 新色相（度，0–360）
  */
 export function hueForName(name, takenHues) {
-  const taken = [...new Set(takenHues)].map((h) => ((Number(h) % 360) + 360) % 360).sort((a, b) => a - b);
+  // 先归一化到 [0,360) 再去重（-30 与 330 视为同一色相）、丢弃非有限值
+  const taken = [...new Set(
+    [...takenHues]
+      .map((h) => Number(h))
+      .filter(Number.isFinite)
+      .map((h) => ((h % 360) + 360) % 360)
+  )].sort((a, b) => a - b);
   if (!taken.length) return 210;
   if (taken.length === 1) return (taken[0] + 180) % 360; // 只有一个占用：取对侧
   // 环形相邻对（含首尾跨 0°）中找最大空隙，取其中点
@@ -62,13 +68,14 @@ function relativeLuminance(hue) {
 }
 
 /**
- * 按真实相对亮度选文字色：亮度 > 0.2266 用深字 #1f2937，否则白字。
- * 0.2266 为「深字/白字对比度相等点」（#1f2937 亮度 ≈ 0.0229），
- * 即对每个色相都取对比度更高的一侧；实测浅底区间约为 25°–205°。
+ * 按真实相对亮度选文字色：亮度 > 0.2241 用深字 #1f2937，否则白字。
+ * 0.2241 为「深字/白字对比度相等点」：由 #1f2937 的 WCAG 相对亮度
+ * L(#1f2937) = 0.02153 反解 (L+0.05)² = 1.05×(0.02153+0.05) → L ≈ 0.2241；
+ * 即对每个色相都取对比度更高的一侧。实测深字区间 ≈15°–210°（1° 级边界）。
  * @param {number} hue 色相（度）@returns {string} 文字色
  */
 export function contrastText(hue) {
-  return relativeLuminance(hue) > 0.2266 ? "#1f2937" : "#ffffff";
+  return relativeLuminance(hue) > 0.2241 ? "#1f2937" : "#ffffff";
 }
 
 /**
@@ -83,7 +90,8 @@ export function hslColor(hue) {
 
 /**
  * 从 name → hue 映射与一批课程名中，为尚未分配的名字生成新色相。
- * 纯函数：不修改传入 Map，返回"名字 → 新 hue"的普通对象（名字按字典序排序后逐个分配，确定性）。
+ * 纯函数：不修改传入 Map，返回"名字 → 新 hue"的无原型对象
+ * （避免课程名为 `__proto__` 等特殊键时被赋值吞掉；名字按字典序排序后逐个分配，确定性）。
  * @param {Map<string, number>|Iterable<[string, number]>} assigned 已分配映射
  * @param {Iterable<string>} names 候选课程名（可含已分配项，自动跳过）
  * @returns {Record<string, number>} 仅含新分配项
@@ -91,7 +99,7 @@ export function hslColor(hue) {
 export function assignHues(assigned, names) {
   const map = new Map(assigned);
   const fresh = [...new Set(names)].filter((n) => n && !map.has(n)).sort();
-  const out = {};
+  const out = Object.create(null);
   for (const n of fresh) {
     const hue = hueForName(n, map.values());
     map.set(n, hue);

@@ -28,6 +28,16 @@ test("hueForName：并列空隙取下限一端（确定性）", () => {
   assert.equal(hueForName("C", [30, 210]), 120);
 });
 
+test("hueForName：环形 wrap 与越界归一化", () => {
+  // 300→100 跨 0° 空隙 160 最大 → 中点 (300+80)%360 = 20
+  assert.equal(hueForName("x", [100, 200, 300]), 20);
+  assert.equal(hueForName("x", [720]), 180); // 720 ≡ 0 → 单元素取对侧
+  // -30 ≡ 330（归一化后去重为 {90,330}）：330→90 跨 0° 空隙 240 最大 → 中点 210
+  assert.equal(hueForName("x", [-30, 330, 90]), 210);
+  assert.equal(hueForName("x", [0, 360]), 180); // 归一化后同值去重 → 单元素对侧
+  assert.equal(hueForName("x", [NaN, Infinity, 90]), 270); // 非有限值被丢弃 → 单元素对侧
+});
+
 test("assignHues：N=6 任意两色相环距 ≥ 30°", () => {
   const hues = assignHues(new Map(), ["语文", "数学", "英语", "物理", "化学", "生物"]);
   const vals = Object.values(hues);
@@ -59,6 +69,13 @@ test("assignHues：同批重复名只分配一次、空名跳过", () => {
   assert.deepEqual(Object.keys(out), ["数学", "物理"]);
 });
 
+test("assignHues：特殊键名（__proto__/constructor）不被吞掉", () => {
+  const out = assignHues(new Map(), ["__proto__", "constructor"]);
+  assert.deepEqual(Object.keys(out).sort(), ["__proto__", "constructor"]);
+  assert.equal(typeof out["__proto__"], "number");
+  assert.equal(typeof out["constructor"], "number");
+});
+
 test("assignHues：确定性（同输入同输出）", () => {
   const names = ["甲", "乙", "丙", "丁"];
   assert.deepEqual(assignHues(new Map(), names), assignHues(new Map(), names));
@@ -76,24 +93,25 @@ test("contrastText：黄绿浅底用深字、蓝紫深底用白字", () => {
   assert.equal(contrastText(60), "#1f2937");
   assert.equal(contrastText(120), "#1f2937");
   assert.equal(contrastText(240), "#ffffff");
-  assert.equal(contrastText(210), "#ffffff");
   assert.equal(contrastText(0), "#ffffff");
   assert.equal(contrastText(300), "#ffffff");
 });
 
-test("contrastText：按真实相对亮度判定（橙/青也要深字）", () => {
-  // 橙 30°：深字对比 ≈5.1:1（白字仅 2.8:1）；青 165°：深字 ≈8.3:1（白字仅 1.7:1）
+test("contrastText：按真实相对亮度判定（橙/青/默认蓝 210 都取更高对比一侧）", () => {
+  // 橙 30°：深字 ≈5.22:1（白字仅 2.81:1）；青 165°：深字 ≈8.45:1（白字仅 1.74:1）
   assert.equal(contrastText(30), "#1f2937");
   assert.equal(contrastText(165), "#1f2937");
   assert.equal(contrastText(195), "#1f2937");
   assert.equal(contrastText(255), "#ffffff");
+  // 默认蓝 210°：深字 3.85:1 略高于白字 3.81:1（在等对比点 0.2241 之上）
+  assert.equal(contrastText(210), "#1f2937");
 });
 
-test("contrastText：浅/深底分界（亮度 0.2266 两侧）", () => {
-  assert.equal(contrastText(25), "#1f2937");
-  assert.equal(contrastText(15), "#ffffff");
-  assert.equal(contrastText(205), "#1f2937");
-  assert.equal(contrastText(215), "#ffffff");
+test("contrastText：浅/深底分界（等对比点 0.2241 两侧，实测深字区间 15°–210°）", () => {
+  assert.equal(contrastText(15), "#1f2937");
+  assert.equal(contrastText(14), "#ffffff");
+  assert.equal(contrastText(210), "#1f2937");
+  assert.equal(contrastText(211), "#ffffff");
 });
 
 test("hslColor：固定饱和度/亮度、色相归一化", () => {

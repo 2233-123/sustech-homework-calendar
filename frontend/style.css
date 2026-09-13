@@ -120,9 +120,10 @@ body {
 .day-list li {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 8px; border-radius: 9px; cursor: pointer;
-  /* 常规行基线 = 自然高（6+21+6 = 33px，改 padding/字号需同步此值与 .bb-row） */
-  min-height: 33px;
 }
+/* 常规行基线 = 自然高（6+21+6 = 33px）；空提示行不参与基线（保持自然高）。
+   改常规行 padding/字号需同步此值与 .bb-row 的 66px（2×） */
+.day-list li:not(.empty-hint) { min-height: 33px; }
 .day-list li:hover { background: var(--accent-soft); }
 /* BB 事务行：两行结构（chip 行 + 标题行），高度 = 常规行 × 2（33 → 66px）；
    上下 11px 使 chip(19)+gap(3)+标题(21) = 43px 内容在 66px 内居中 */
