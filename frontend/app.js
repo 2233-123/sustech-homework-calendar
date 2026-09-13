@@ -6,6 +6,35 @@ import { formatDateLabel, formatDateTime, formatLead, formatTime, toDateStr } fr
 
 const api = createApi();
 const $ = (id) => document.getElementById(id);
+const PAGE_SIZE = 3;
+
+// 上报内容高度驱动窗口自适应；同时按需切换 overflowing（工作区放不下时滚动兜底）
+let lastFitH = -1;
+let lastFitAt = 0;
+let fitTimer = null;
+function reportFit() {
+  const run = () => {
+    fitTimer = null;
+    lastFitAt = Date.now();
+    const de = document.documentElement;
+    document.body.classList.toggle("overflowing", de.scrollHeight > de.clientHeight + 1);
+    const h = Math.round($("app").offsetHeight);
+    if (h !== lastFitH) {
+      lastFitH = h;
+      if (window.hwShell && window.hwShell.fitHeight) window.hwShell.fitHeight(h);
+    }
+  };
+  const since = Date.now() - lastFitAt;
+  if (since >= 50) {
+    if (fitTimer) {
+      clearTimeout(fitTimer);
+      fitTimer = null;
+    }
+    run();
+  } else if (!fitTimer) {
+    fitTimer = setTimeout(run, 50 - since);
+  }
+}
 
 const state = {
   year: new Date().getFullYear(),
@@ -18,6 +47,7 @@ const state = {
   overview: null,
   remindLoaded: [null, null],
   remindDirty: [false, false],
+  dayPage: 0,
 };
 
 // ---------- 状态栏 ----------
@@ -56,6 +86,7 @@ async function loadMonth() {
 }
 
 async function loadDay() {
+  state.dayPage = 0;
   try {
     const data = await api.getDay(state.selected);
     state.dayData = { schedules: data.schedules || [], assignments: data.assignments || [] };
@@ -67,6 +98,7 @@ async function loadDay() {
 
 function selectDate(date) {
   state.selected = date;
+  state.dayPage = 0;
   renderMonth();
   loadDay();
 }
@@ -98,11 +130,14 @@ function renderMonth() {
       if (!cell.inMonth) btn.classList.add("out");
       if (cell.isToday) btn.classList.add("today");
       if (cell.date === state.selected) btn.classList.add("selected");
-      btn.textContent = String(cell.day);
+      const num = document.createElement("span");
+      num.className = "num";
+      num.textContent = String(cell.day);
+      btn.appendChild(num);
+      const wrap = document.createElement("span");
+      wrap.className = "dots"; // 常驻占位（无事项也占行），保证全网格基线一致
       const d = dots.get(cell.date);
       if (d && (d.sched || d.bb)) {
-        const wrap = document.createElement("span");
-        wrap.className = "dots";
         const nSched = Math.min(d.sched, 3);
         const nBb = Math.min(d.bb, 3 - nSched);
         for (let i = 0; i < nSched; i++) {
@@ -115,12 +150,13 @@ function renderMonth() {
           dot.className = "dot bb";
           wrap.appendChild(dot);
         }
-        btn.appendChild(wrap);
       }
+      btn.appendChild(wrap);
       btn.addEventListener("click", () => selectDate(cell.date));
       grid.appendChild(btn);
     }
   }
+  reportFit();
 }
 
 function renderDay() {
@@ -136,9 +172,15 @@ function renderDay() {
     li.className = "empty-hint";
     li.textContent = "这一天还没有安排";
     list.appendChild(li);
+    renderPager(1, 0);
+    reportFit();
     return;
   }
-  for (const row of rows) {
+  const pageCount = Math.ceil(rows.length / PAGE_SIZE);
+  if (state.dayPage >= pageCount) state.dayPage = pageCount - 1;
+  if (state.dayPage < 0) state.dayPage = 0;
+  const page = state.dayPage;
+  for (const row of rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)) {
     const li = document.createElement("li");
     const time = document.createElement("span");
     time.className = "item-time";
@@ -167,6 +209,33 @@ function renderDay() {
     }
     li.addEventListener("click", () => openItemOverview(row.kind, row.item));
     list.appendChild(li);
+  }
+  renderPager(pageCount, page);
+  reportFit();
+}
+
+function renderPager(pageCount, page) {
+  const pager = $("day-pager");
+  const dots = $("pager-dots");
+  if (pageCount <= 1) {
+    pager.hidden = true;
+    dots.replaceChildren();
+    return;
+  }
+  pager.hidden = false;
+  $("pager-prev").disabled = page <= 0;
+  $("pager-next").disabled = page >= pageCount - 1;
+  dots.replaceChildren();
+  for (let i = 0; i < pageCount; i++) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pager-dot" + (i === page ? " active" : "");
+    b.title = `第 ${i + 1} 页`;
+    b.addEventListener("click", () => {
+      state.dayPage = i;
+      renderDay();
+    });
+    dots.appendChild(b);
   }
 }
 
@@ -367,14 +436,9 @@ function fillSelect(sel, max) {
 
 function updateScaleReadout() {
   const p = Number($("s-scale").value) || 100;
-  const w = Math.round((408 * p) / 100);
-  const h = Math.round((760 * p) / 100);
+  const w = state.winW ?? Math.round((408 * p) / 100);
+  const h = state.winH ?? Math.round((760 * p) / 100);
   $("s-scale-val").textContent = `${p}%（${w}×${h}）`;
-}
-
-// 低于 70% 进入紧凑模式：字号钉在 MIN_ZOOM（见 electron/main.js），视口继续收窄、纵向改用页面滚动
-function setCompact(p) {
-  document.body.classList.toggle("compact", Number(p) < 70);
 }
 
 async function openSettings() {
@@ -405,7 +469,6 @@ async function openSettings() {
     $("s-opacity-val").textContent = Math.round(Number($("s-opacity").value) * 100) + "%";
     $("s-scale").value = String(Math.min(150, Math.max(40, Math.round(Number(cfg.window_scale) || 100))));
     updateScaleReadout();
-    setCompact($("s-scale").value);
     let autostart = !!cfg.autostart;
     if (window.hwShell) {
       try {
@@ -640,9 +703,20 @@ function bind() {
       }
     }, 80);
   }
-  const sendScale = (p) => {
+  const sendScale = async (p) => {
     scaleIpcAt = Date.now();
-    if (window.hwShell) window.hwShell.setWindowScale(p);
+    if (window.hwShell) {
+      try {
+        const r = await window.hwShell.setWindowScale(p);
+        if (r && r.ok) {
+          state.winW = r.width;
+          state.winH = r.height;
+          updateScaleReadout();
+        }
+      } catch {
+        /* 保持标称读数 */
+      }
+    }
     scheduleAnchor();
   };
   // 低档位下设置卡片可视高度收缩，滑条可能落到折叠线之外：仅滚动卡片内部保持其可见
@@ -666,7 +740,6 @@ function bind() {
   scaleSlider.addEventListener("input", () => {
     updateScaleReadout();
     const p = Number(scaleSlider.value) || 100;
-    setCompact(p);
     ensureScaleVisible();
     const now = Date.now();
     if (now - scaleIpcAt > 60) {
@@ -688,11 +761,12 @@ function bind() {
       scaleTimer = null;
     }
     const p = Number(scaleSlider.value) || 100;
-    setCompact(p);
     if (window.hwShell) {
       try {
         const r = await window.hwShell.setWindowScale(p);
         if (r && r.ok) {
+          state.winW = r.width;
+          state.winH = r.height;
           $("s-scale-val").textContent = `${r.scale}%（${r.width}×${r.height}）`;
         }
       } catch {
@@ -804,6 +878,17 @@ function bind() {
     $("modal-settings").hidden = true;
   });
   $("btn-logout").addEventListener("click", doLogout);
+  $("pager-prev").addEventListener("click", () => {
+    if (state.dayPage > 0) {
+      state.dayPage--;
+      renderDay();
+    }
+  });
+  $("pager-next").addEventListener("click", () => {
+    state.dayPage++;
+    renderDay();
+  });
+  window.addEventListener("resize", () => requestAnimationFrame(reportFit));
 }
 
 async function init() {
@@ -817,7 +902,9 @@ async function init() {
   await loadMonth();
   await loadDay();
   await refreshSettings();
-  setCompact(Number(state.settings.window_scale) || 100);
+  reportFit();
+  setTimeout(reportFit, 300); // 布局/滚动条落定后再校正一次，消除首帧亚像素残差
+  if (window.ResizeObserver) new ResizeObserver(() => reportFit()).observe($("app")); // 捕获后续内容高变化
   connectSSE();
 }
 

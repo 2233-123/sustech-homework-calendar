@@ -22,6 +22,11 @@ let preCollapseBounds = null;
 let scaleCurrent = 100;
 let scaleTarget = 100;
 let scaleTimer = null;
+let heightCurrent = WINDOW_HEIGHT; // 当前窗口内容高（DIP）
+let heightTarget = WINDOW_HEIGHT; // 目标窗口内容高（DIP）
+let lastContentH = WINDOW_HEIGHT; // 最近一次内容 CSS 高（来自渲染层 fit-height）
+let firstFitDone = false;
+let firstShowTimer = null;
 const EDGE_TAB_W = 16;
 const EDGE_TAB_H = 120;
 
@@ -56,16 +61,17 @@ function clampBoundsToWorkArea(bounds, wa) {
   return { x, y, width, height };
 }
 
-// 平滑缩放：把 currentScale 逐帧逼近 targetScale，每帧同步落地内容尺寸与 zoom。
-function applyScaleFrame(s) {
+// 平滑缩放：逐帧同步逼近 (scale, height)，每帧落地内容尺寸与 zoom。
+function applyScaleFrame(s, h) {
   if (!mainWindow) return;
   const wa = screen.getDisplayMatching(mainWindow.getBounds()).workArea;
-  const { width, height } = scaledSize(s, wa);
   const zoom = Math.max(s / 100, MIN_ZOOM);
-  mainWindow.setContentSize(width, height);
+  const W = Math.min(Math.round((WINDOW_WIDTH * s) / 100), wa.width);
+  const H = Math.min(Math.round(h), wa.height); // 高度被工作区钳制时由页面滚动兜底
+  mainWindow.setContentSize(W, H);
   mainWindow.webContents.setZoomFactor(zoom);
   const b = mainWindow.getBounds();
-  const c = clampBoundsToWorkArea(b, wa);
+  const c = clampBoundsToWorkArea(b, wa); // 向下生长；底越界则上移
   if (c.x !== b.x || c.y !== b.y) mainWindow.setPosition(c.x, c.y); // 落定后在收敛分支统一落盘
 }
 
@@ -83,17 +89,26 @@ function startScaleAnim() {
       stopScaleAnim();
       return;
     }
-    const d = scaleTarget - scaleCurrent;
-    if (Math.abs(d) < 0.5) {
+    const ds = scaleTarget - scaleCurrent;
+    const dh = heightTarget - heightCurrent;
+    if (Math.abs(ds) < 0.5 && Math.abs(dh) < 0.5) {
       scaleCurrent = scaleTarget;
-      applyScaleFrame(scaleCurrent);
+      heightCurrent = heightTarget;
+      applyScaleFrame(scaleCurrent, heightCurrent);
       saveWindowPos(); // 平滑落定后一次性落盘（避免动画每帧成串 PUT）
       stopScaleAnim();
       return;
     }
-    scaleCurrent += d * 0.35;
-    applyScaleFrame(scaleCurrent);
+    scaleCurrent += ds * 0.35;
+    heightCurrent += dh * 0.35;
+    applyScaleFrame(scaleCurrent, heightCurrent);
   }, 16);
+}
+
+// 目标高度 = 内容 CSS 高 × zoom（与当前缩放目标一致）
+function recomputeHeightTarget() {
+  const z = Math.max(scaleTarget / 100, MIN_ZOOM);
+  heightTarget = Math.round(lastContentH * z);
 }
 
 function backendCommand() {
@@ -232,9 +247,16 @@ function createWindow(port, prefs) {
   });
   scaleCurrent = clampScale(prefs.windowScale);
   scaleTarget = scaleCurrent;
+  heightCurrent = bounds.height;
+  heightTarget = bounds.height;
+  lastContentH = Math.round(bounds.height / Math.max(scaleCurrent / 100, MIN_ZOOM)); // 近似初值，首个 fit-height 会校正
   mainWindow.setOpacity(prefs.opacity);
   mainWindow.loadURL(`http://127.0.0.1:${port}/`);
-  mainWindow.once("ready-to-show", () => mainWindow.show());
+  // 先不 show：等首次 fit-height 上报再显示（1.2s 超时兜底），避免"先大后缩"闪烁
+  firstShowTimer = setTimeout(() => {
+    firstFitDone = true;
+    if (mainWindow && !mainWindow.isVisible()) mainWindow.show();
+  }, 1200);
   mainWindow.on("moved", debounce(saveWindowPos, 500));
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -261,7 +283,8 @@ function hideToEdge() {
   if (!mainWindow || !mainWindow.isVisible() || edgeTab) return false;
   stopScaleAnim(); // 收起前让平滑循环落定，避免隐藏时仍在改尺寸
   scaleCurrent = scaleTarget;
-  applyScaleFrame(scaleCurrent);
+  heightCurrent = heightTarget;
+  applyScaleFrame(scaleCurrent, heightCurrent);
   preCollapseBounds = mainWindow.getContentBounds();
   const wa = screen.getDisplayMatching(preCollapseBounds).workArea;
   const y = Math.min(
@@ -375,10 +398,28 @@ function registerIpc() {
     if (!mainWindow) return { ok: false };
     const scale = clampScale(p);
     scaleTarget = scale; // 设定目标，由平滑循环逼近
+    recomputeHeightTarget();
     startScaleAnim();
     const wa = screen.getDisplayMatching(mainWindow.getBounds()).workArea;
-    const { width, height } = scaledSize(scale, wa);
-    return { ok: true, scale, width, height };
+    const width = Math.min(Math.round((WINDOW_WIDTH * scale) / 100), wa.width);
+    return { ok: true, scale, width, height: Math.round(heightTarget) };
+  });
+  ipcMain.handle("shell:fit-height", (_e, hc) => {
+    if (!mainWindow) return { ok: false };
+    const Hc = Number(hc);
+    if (!Number.isFinite(Hc) || Hc <= 0) return { ok: false };
+    lastContentH = Hc;
+    recomputeHeightTarget();
+    startScaleAnim();
+    if (!firstFitDone) {
+      firstFitDone = true;
+      if (firstShowTimer) {
+        clearTimeout(firstShowTimer);
+        firstShowTimer = null;
+      }
+      mainWindow.show();
+    }
+    return { ok: true, height: heightTarget };
   });
   ipcMain.handle("shell:get-window-info", () => {
     if (!mainWindow) return null;
