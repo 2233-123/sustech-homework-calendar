@@ -568,17 +568,34 @@ function bind() {
   });
   $("btn-settings").addEventListener("click", openSettings);
   let opacityIpcAt = 0;
+  let opacityTimer = null;
+  const sendOpacity = (v) => {
+    opacityIpcAt = Date.now();
+    if (window.hwShell) window.hwShell.setOpacity(v);
+  };
   const opacitySlider = $("s-opacity");
   opacitySlider.addEventListener("input", () => {
     const v = Number(opacitySlider.value) || 0.95;
     $("s-opacity-val").textContent = Math.round(v * 100) + "%";
     const now = Date.now();
-    if (window.hwShell && now - opacityIpcAt > 50) {
-      opacityIpcAt = now;
-      window.hwShell.setOpacity(v);
+    if (now - opacityIpcAt > 50) {
+      if (opacityTimer) {
+        clearTimeout(opacityTimer);
+        opacityTimer = null;
+      }
+      sendOpacity(v);
+    } else if (!opacityTimer) {
+      opacityTimer = setTimeout(() => {
+        opacityTimer = null;
+        sendOpacity(Number(opacitySlider.value) || 0.95);
+      }, 50);
     }
   });
   opacitySlider.addEventListener("change", async () => {
+    if (opacityTimer) {
+      clearTimeout(opacityTimer);
+      opacityTimer = null;
+    }
     const v = Number(opacitySlider.value) || 0.95;
     if (window.hwShell) window.hwShell.setOpacity(v);
     try {
