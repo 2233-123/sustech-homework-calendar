@@ -577,6 +577,9 @@ function bind() {
       state.remindDirty[slot] = true;
     });
   });
+  $("btn-edge-hide").addEventListener("click", () => {
+    if (window.hwShell) window.hwShell.hideToEdge();
+  });
   $("btn-settings").addEventListener("click", openSettings);
   let opacityIpcAt = 0;
   let opacityTimer = null;

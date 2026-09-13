@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld("hwShell", {
   notify: (title, body) => ipcRenderer.invoke("shell:notify", { title, body }),
   openExternal: (url) => ipcRenderer.invoke("shell:open-external", url),
   setWindowScale: (p) => ipcRenderer.invoke("shell:set-window-scale", p),
+  hideToEdge: () => ipcRenderer.invoke("shell:hide-to-edge"),
 });

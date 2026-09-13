@@ -16,6 +16,10 @@ let tray = null;
 let backendPort = 0;
 let quitting = false;
 let posTimer = null;
+let edgeTab = null;
+let preCollapseBounds = null;
+const EDGE_TAB_W = 16;
+const EDGE_TAB_H = 120;
 
 function debounce(fn, ms) {
   return (...args) => {
@@ -179,8 +183,77 @@ function createWindow(port, prefs) {
 
 function toggleWindow() {
   if (!mainWindow) return;
+  if (edgeTab) {
+    restoreFromEdge();
+    return;
+  }
   if (mainWindow.isVisible()) mainWindow.hide();
   else mainWindow.show();
+}
+
+function hideToEdge() {
+  if (!mainWindow || !mainWindow.isVisible() || edgeTab) return false;
+  preCollapseBounds = mainWindow.getContentBounds();
+  const wa = screen.getDisplayMatching(preCollapseBounds).workArea;
+  const y = Math.min(
+    Math.max(preCollapseBounds.y + Math.round((preCollapseBounds.height - EDGE_TAB_H) / 2), wa.y),
+    wa.y + wa.height - EDGE_TAB_H
+  );
+  edgeTab = new BrowserWindow({
+    width: EDGE_TAB_W,
+    height: EDGE_TAB_H,
+    x: wa.x + wa.width - EDGE_TAB_W,
+    y,
+    type: "toolbar",
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    alwaysOnTop: true,
+    focusable: true,
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+  // Windows 对 frameless 窗口有最小宽度约束；仅 type:"toolbar" + 构造后 setBounds 可稳定达 W=16（否则实测最小 20/32）。
+  edgeTab.setBounds({ x: wa.x + wa.width - EDGE_TAB_W, y, width: EDGE_TAB_W, height: EDGE_TAB_H });
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+    html,body{margin:0;height:100%;background:transparent;overflow:hidden;}
+    .bar{position:absolute;inset:0;border-radius:8px 0 0 8px;background:rgba(37,99,235,.55);box-shadow:0 0 6px rgba(0,0,0,.25);transition:background .12s;}
+    body:hover .bar{background:rgba(37,99,235,.9);}
+  </style></head><body><div class="bar" title="点击展开"></div></body></html>`;
+  edgeTab.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
+  edgeTab.once("ready-to-show", () => {
+    if (edgeTab) edgeTab.showInactive();
+  });
+  edgeTab.on("focus", restoreFromEdge);
+  edgeTab.on("closed", () => {
+    edgeTab = null;
+  });
+  mainWindow.hide();
+  return true;
+}
+
+function restoreFromEdge() {
+  if (edgeTab) {
+    const tab = edgeTab;
+    edgeTab = null;
+    try {
+      tab.destroy();
+    } catch {
+      /* 已销毁则忽略 */
+    }
+  }
+  if (mainWindow) {
+    const b = preCollapseBounds;
+    preCollapseBounds = null;
+    if (b) mainWindow.setContentBounds(b);
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  return true;
 }
 
 function createTray() {
@@ -228,6 +301,7 @@ function registerIpc() {
     if (!/^https:\/\/bb\.sustech\.edu\.cn\//.test(u)) return false; // 仅允许 BB 域名
     return shell.openExternal(u).then(() => true, () => false);
   });
+  ipcMain.handle("shell:hide-to-edge", () => hideToEdge());
   ipcMain.handle("shell:set-window-scale", (_e, p) => {
     if (!mainWindow) return { ok: false };
     const scale = clampScale(p);
