@@ -628,6 +628,18 @@ function bind() {
   const scaleSlider = $("s-scale");
   let scaleIpcAt = 0;
   let scaleTimer = null;
+  let scaleVisTimer = null;
+  function pollScaleVisible(totalMs = 1200) {
+    const t0 = Date.now();
+    if (scaleVisTimer) clearInterval(scaleVisTimer);
+    scaleVisTimer = setInterval(() => {
+      ensureScaleVisible();
+      if (Date.now() - t0 > totalMs) {
+        clearInterval(scaleVisTimer);
+        scaleVisTimer = null;
+      }
+    }, 80);
+  }
   const sendScale = (p) => {
     scaleIpcAt = Date.now();
     if (window.hwShell) window.hwShell.setWindowScale(p);
@@ -688,7 +700,7 @@ function bind() {
       }
     }
     stopAnchor();
-    setTimeout(ensureScaleVisible, 300); // 键盘/程序化改档后布局落定，再复检滑条可见性
+    pollScaleVisible(); // 键盘/程序化改档：短轮询至布局收敛，避免滑条被卡片折叠线裁掉
     try {
       const saved = await api.putSettings({ window_scale: p });
       if (saved) state.settings = saved;

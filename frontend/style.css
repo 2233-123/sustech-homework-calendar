@@ -203,6 +203,8 @@ body {
 /* 紧凑模式（<70%）：字号钉在 MIN_ZOOM，视口继续收窄，纵向改为页面滚动 */
 body.compact { overflow-y: auto; }
 body.compact .widget { height: auto; min-height: 100vh; }
+/* compact 下 .widget 高度自动，日历的 flex:1 0 会被压成 ~10px：改为自然行高，日期不再塌陷 */
+body.compact .calendar { flex: none; grid-auto-rows: minmax(26px, auto); }
 body.compact .day-panel { flex: none; }
 body.compact .day-list { flex: none; overflow: visible; }
 /* compact 下弹层钉到视口（其包含块是带 backdrop-filter 的 .widget），避免卡片随文档高度居中而被窗口底边裁掉 */
@@ -214,5 +216,5 @@ body.compact .settings-group h4 { margin: 6px 0 4px; }
 /* scrollbar-width:auto 仅用于覆盖全局 *{scrollbar-width:none}；auto 不抑制 ::-webkit-scrollbar，从而得到 6px 细条 */
 html:has(body.compact) { height: auto; overflow-y: auto; scrollbar-width: auto; }
 html:has(body.compact)::-webkit-scrollbar { width: 6px; height: 6px; display: block; }
-html:has(body.compact)::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.5); border-radius: 3px; }
+html:has(body.compact)::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.62); border-radius: 3px; }
 html:has(body.compact)::-webkit-scrollbar-track { background: transparent; }
