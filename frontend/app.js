@@ -622,12 +622,21 @@ function bind() {
   $("s-scale").addEventListener("input", updateScaleReadout);
   $("s-scale").addEventListener("change", async () => {
     const p = Number($("s-scale").value) || 100;
-    if (window.hwShell) window.hwShell.setWindowScale(p);
+    if (window.hwShell) {
+      try {
+        const r = await window.hwShell.setWindowScale(p);
+        if (r && r.ok) {
+          $("s-scale-val").textContent = `${r.scale}%（${r.width}×${r.height}）`;
+        }
+      } catch {
+        /* 保持标称读数 */
+      }
+    }
     try {
       const saved = await api.putSettings({ window_scale: p });
       if (saved) state.settings = saved;
     } catch {
-      /* 写穿失败不打断；「保存」仍可统一提交 */
+      /* 写穿失败不打断 */
     }
   });
   $("btn-item-close").addEventListener("click", closeItemOverview);

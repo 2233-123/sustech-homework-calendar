@@ -148,17 +148,28 @@ async function saveWindowPos() {
 }
 
 function createWindow(port, prefs) {
-  const [x, y] = prefs.windowPos || [undefined, undefined];
-  const disp =
-    Array.isArray(prefs.windowPos) && prefs.windowPos.every(Number.isFinite)
-      ? screen.getDisplayNearestPoint({ x: prefs.windowPos[0], y: prefs.windowPos[1] })
-      : screen.getPrimaryDisplay();
-  const { width, height } = scaledSize(prefs.windowScale, disp.workArea);
+  const hasPos = Array.isArray(prefs.windowPos) && prefs.windowPos.every(Number.isFinite);
+  const disp = hasPos
+    ? screen.getDisplayNearestPoint({ x: prefs.windowPos[0], y: prefs.windowPos[1] })
+    : screen.getPrimaryDisplay();
+  const wa = disp.workArea;
+  const size = scaledSize(prefs.windowScale, wa);
+  const bounds = hasPos
+    ? clampBoundsToWorkArea(
+        { x: prefs.windowPos[0], y: prefs.windowPos[1], width: size.width, height: size.height },
+        wa
+      )
+    : {
+        x: wa.x + Math.round((wa.width - size.width) / 2),
+        y: wa.y + Math.round((wa.height - size.height) / 2),
+        width: size.width,
+        height: size.height,
+      };
   mainWindow = new BrowserWindow({
-    width,
-    height,
-    x,
-    y,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
     useContentSize: true,
     show: false,
     frame: false,
@@ -318,7 +329,10 @@ function registerIpc() {
     mainWindow.setContentSize(width, height);
     const b = mainWindow.getBounds();
     const c = clampBoundsToWorkArea(b, wa);
-    if (c.x !== b.x || c.y !== b.y) mainWindow.setPosition(c.x, c.y);
+    if (c.x !== b.x || c.y !== b.y) {
+      mainWindow.setPosition(c.x, c.y);
+      saveWindowPos();
+    }
     return { ok: true, scale, width, height };
   });
 }
