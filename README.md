@@ -26,6 +26,41 @@
 
 设计文档与实施计划见 `docs/superpowers/`（含 rev2 体验改进设计案与实测记录）。
 
+## 项目结构
+
+```
+作业日程/
+├─ backend/                     # Flask 后端：REST + SSE，仅监听 127.0.0.1
+│  ├─ app.py                    # 路由与请求体校验（/api/*）
+│  ├─ service.py                # 业务编排：登录/同步/缓存/提醒调度
+│  ├─ cas.py / bb.py            # SUSTech CAS 登录客户端 / Blackboard 会话与抓取
+│  ├─ db.py / config.py         # SQLite 访问 / 配置读写（原子写 + RLock）
+│  ├─ dpapi.py / reminder.py    # 凭据加解密（DPAPI）/ 提醒判定
+│  ├─ events.py / main.py       # SSE 事件总线 / 进程入口（打印 PORT=）
+│  └─ tests/                    # pytest 用例与测试替身
+├─ frontend/                    # 原生 ES Module 前端（零构建，由后端静态托管）
+│  ├─ app.js                    # 入口：状态、渲染、交互装配
+│  ├─ lib/                      # 纯逻辑模块：api / cal / fmt / page / sse
+│  ├─ tests/                    # node:test 单测（页面逻辑与纯函数）
+│  ├─ index.html / style.css    # 页面骨架与样式
+│  └─ package.json              # 仅供 node --test 使用（无依赖、无构建）
+├─ electron/                    # Electron 外壳（无边框窗口 + 托盘）
+│  ├─ main.js / preload.js      # 主进程 / contextBridge 能力暴露
+│  ├─ build/installer.nsh       # NSIS 自定义页（快捷方式选项）
+│  ├─ resources/backend/        # 打包用 backend.exe（构建产物）
+│  ├─ dist/                     # 安装包/便携版输出（构建产物）
+│  └─ icon.png / tray.png / make-tray-icon.js / package.json
+├─ packaging/                   # 打包脚本
+│  ├─ backend_entry.py          # PyInstaller 入口
+│  └─ build.ps1                 # PyInstaller + electron-builder 一键打包
+├─ docs/superpowers/            # 设计与计划文档
+│  ├─ specs/                    # 各 rev 设计案（含实测记录）
+│  └─ plans/                    # 分阶段实施计划
+└─ README.md / requirements.txt / pytest.ini / .gitignore
+```
+
+> 说明：`.venv/`、`backend/**/__pycache__/`、`electron/node_modules/`、`electron/dist/`、`electron/resources/`、`build/` 为本地生成物，不纳入版本库；`electron/tests/` 无独立测试目录，外壳行为由真机隔离实例（WMI + CDP）验证。
+
 ## 使用（打包版）
 
 1. 运行 `作业日程 Setup 0.1.0.exe` 安装（未签名，SmartScreen 提示时选「更多信息 → 仍要运行」）；或直接使用便携版 `作业日程 0.1.0.exe`
