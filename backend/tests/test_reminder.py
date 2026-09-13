@@ -218,12 +218,46 @@ def test_t7_migrates_legacy_reminder_log(tmp_path):
     conn.commit()
     conn.close()
     d = Database(path)
-    # 迁移保留历史（fire_at 置空）
-    assert d.was_fired("schedule", 1, 1800, "") is True
+    # 迁移保留历史：旧行 fire_at 回填为 fired_at（等值秒可由精确去重拦截）
+    assert d.was_fired("schedule", 1, 1800, "2026-09-12T13:30:00") is True
+    assert d.was_fired("schedule", 1, 1800, "") is False
     assert d.last_fired_at("schedule", 1) == "2026-09-12T13:30:00"
     # 迁移幂等：再次初始化不报错、历史仍在
     d2 = Database(path)
     assert d2.last_fired_at("schedule", 1) == "2026-09-12T13:30:00"
     # 旧触发时刻更早（13:00 < 13:30）→ 过期抑制，不重复提醒
-    d2.add_schedule(title="旧会议", start_at="2026-09-12T14:00:00", remind_before=3600)
+    sid = d2.add_schedule(title="旧会议", start_at="2026-09-12T14:00:00", remind_before=3600)
+    assert sid == 1
     assert reminder.collect_due(d2, NOW, []) == []
+    # 等值秒（fire 13:30 == 旧 fired_at）→ 精确去重拦截（回归：空 fire_at 旧实现会补弹）
+    d2.update_schedule(sid, remind_before=1800)
+    assert reminder.collect_due(d2, NOW, []) == []
+
+
+def test_t7b_backfills_blank_fire_at_on_reinit(tmp_path):
+    """中间版本已迁移（fire_at 置空）的库：再次启动回填 fire_at=fired_at（幂等）。"""
+    path = tmp_path / "blank.db"
+    conn = sqlite3.connect(str(path))
+    conn.executescript(
+        """
+        CREATE TABLE reminder_log (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          kind       TEXT    NOT NULL,
+          ref_id     INTEGER NOT NULL,
+          offset_sec INTEGER NOT NULL,
+          fire_at    TEXT    NOT NULL,
+          fired_at   TEXT    NOT NULL,
+          UNIQUE(kind, ref_id, offset_sec, fire_at)
+        );
+        INSERT INTO reminder_log (kind, ref_id, offset_sec, fire_at, fired_at)
+          VALUES ('schedule', 7, 600, '', '2026-09-12T13:30:00');
+        """
+    )
+    conn.commit()
+    conn.close()
+    d = Database(path)
+    assert d.was_fired("schedule", 7, 600, "2026-09-12T13:30:00") is True
+    assert d.was_fired("schedule", 7, 600, "") is False
+    # 二次启动：回填后保持稳定
+    d2 = Database(path)
+    assert d2.was_fired("schedule", 7, 600, "2026-09-12T13:30:00") is True

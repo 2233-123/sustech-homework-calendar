@@ -83,11 +83,17 @@ class Database:
     def _migrate_reminder_log(self) -> None:
         """旧版 reminder_log（无 fire_at 列）→ 新结构；保留 fired_at 历史。
 
-        幂等：以 PRAGMA table_info 判断列是否存在，已迁移则直接返回。
-        旧行的 fire_at 置 ''（旧键不含触发时刻）；此后由 last_fired_at 抑制更早时刻的补发。
+        幂等：以 PRAGMA table_info 判断列是否存在；已迁移的库补一次旧行回填。
+        旧行的 fire_at 回填为 fired_at（旧键不含触发时刻）：等值秒由精确去重拦截，
+        更早时刻由 last_fired_at 抑制，避免升级后补弹旧提醒。
         """
         cols = {row["name"] for row in self._conn.execute("PRAGMA table_info(reminder_log)")}
         if "fire_at" in cols:
+            # 中间版本迁移遗留的空 fire_at 行补一次回填；OR IGNORE 跳过与既有行冲突者
+            self._conn.execute(
+                "UPDATE OR IGNORE reminder_log SET fire_at = fired_at"
+                " WHERE fire_at = '' AND fired_at != ''"
+            )
             return
         self._conn.executescript(
             """
@@ -102,7 +108,7 @@ class Database:
               UNIQUE(kind, ref_id, offset_sec, fire_at)
             );
             INSERT INTO reminder_log (kind, ref_id, offset_sec, fire_at, fired_at)
-              SELECT kind, ref_id, offset_sec, '', fired_at FROM reminder_log_old;
+              SELECT kind, ref_id, offset_sec, fired_at, fired_at FROM reminder_log_old;
             DROP TABLE reminder_log_old;
             """
         )
