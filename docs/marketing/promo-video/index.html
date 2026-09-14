@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>作业日程 · 30s 宣传片（SVG 时间轴）</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+  #stage { position: fixed; left: 0; top: 0; transform-origin: 0 0; }
+  svg { display: block; }
+  text { font-family: "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<div id="stage">
+<svg id="root" width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 背景与光斑 -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a0a0c"/><stop offset="0.55" stop-color="#10131a"/><stop offset="1" stop-color="#141821"/>
+    </linearGradient>
+    <radialGradient id="blobBlueR"><stop offset="0" stop-color="#2563eb" stop-opacity="0.50"/><stop offset="0.6" stop-color="#2563eb" stop-opacity="0.16"/><stop offset="1" stop-color="#2563eb" stop-opacity="0"/></radialGradient>
+    <radialGradient id="blobVioletR"><stop offset="0" stop-color="#7c3aed" stop-opacity="0.46"/><stop offset="0.6" stop-color="#7c3aed" stop-opacity="0.14"/><stop offset="1" stop-color="#7c3aed" stop-opacity="0"/></radialGradient>
+    <radialGradient id="blobWhiteR"><stop offset="0" stop-color="#dbeafe" stop-opacity="0.20"/><stop offset="1" stop-color="#dbeafe" stop-opacity="0"/></radialGradient>
+    <radialGradient id="vigR"><stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.42"/></radialGradient>
+    <radialGradient id="winGlowR"><stop offset="0" stop-color="#3b82f6" stop-opacity="0.32"/><stop offset="0.55" stop-color="#6d28d9" stop-opacity="0.14"/><stop offset="1" stop-color="#6d28d9" stop-opacity="0"/></radialGradient>
+    <!-- 应用图标（矢量，与 icon.png / tray.png 同构） -->
+    <linearGradient id="iconTileG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#eef3fc"/></linearGradient>
+    <linearGradient id="iconHeadG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+    <!-- CTA 渐变字 -->
+    <linearGradient id="ghGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#a78bfa"/></linearGradient>
+    <!-- 滤镜 -->
+    <filter id="blurXL" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="90"/></filter>
+    <filter id="blurL" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="34"/></filter>
+    <filter id="winShadow" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="26" stdDeviation="34" flood-color="#020617" flood-opacity="0.55"/></filter>
+    <filter id="softSh" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#020617" flood-opacity="0.45"/></filter>
+    <filter id="cardSh" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#020617" flood-opacity="0.40"/></filter>
+    <!-- 裁剪 -->
+    <clipPath id="winClipA"><rect x="0" y="0" width="408" height="660" rx="16"/></clipPath>
+    <clipPath id="bubClipA"><rect x="1260" y="170" width="581" height="188" rx="26"/></clipPath>
+    <!-- 应用图标画稿（100×100 单位；对齐 tray 候选 A 几何） -->
+    <g id="appIconArt">
+      <rect x="4.4" y="4.4" width="91.2" height="91.2" rx="24.1" fill="#b9c5d6"/>
+      <rect x="7.8" y="7.8" width="84.4" height="84.4" rx="20.6" fill="url(#iconTileG)"/>
+      <rect x="12.5" y="19.4" width="75.0" height="68.7" rx="13.1" fill="#86b4f7"/>
+      <rect x="15.6" y="22.5" width="68.75" height="62.5" rx="10" fill="#ffffff"/>
+      <rect x="32.5" y="16.3" width="4.7" height="10.8" rx="2.35" fill="#2563eb"/>
+      <rect x="62.8" y="16.3" width="4.7" height="10.8" rx="2.35" fill="#2563eb"/>
+      <g clip-path="url(#iconCardClip)">
+        <rect x="15.6" y="22.5" width="68.75" height="20" fill="url(#iconHeadG)"/>
+        <rect x="15.6" y="32.5" width="68.75" height="10" fill="#2563eb"/>
+      </g>
+      <rect x="19.7" y="47.5" width="17.5" height="13.75" rx="3.1" fill="#2563eb"/>
+      <rect x="41.2" y="47.5" width="17.5" height="13.75" rx="3.1" fill="#2563eb"/>
+      <rect x="62.8" y="47.5" width="17.5" height="13.75" rx="3.1" fill="#2563eb"/>
+      <rect x="19.7" y="65.6" width="17.5" height="13.75" rx="3.1" fill="#a6c9fa"/>
+      <rect x="41.2" y="65.6" width="17.5" height="13.75" rx="3.1" fill="#a6c9fa"/>
+      <rect x="62.8" y="65.6" width="17.5" height="13.75" rx="3.1" fill="#7c3aed"/>
+    </g>
+    <clipPath id="iconCardClip"><rect x="15.6" y="22.5" width="68.75" height="62.5" rx="10"/></clipPath>
+  </defs>
+
+  <!-- ================= 背景 ================= -->
+  <rect width="1920" height="1080" fill="url(#bgGrad)"/>
+  <g id="blobs">
+    <ellipse id="blobA" cx="520" cy="330" rx="470" ry="470" fill="url(#blobBlueR)" filter="url(#blurXL)"/>
+    <ellipse id="blobB" cx="1480" cy="800" rx="520" ry="520" fill="url(#blobVioletR)" filter="url(#blurXL)"/>
+    <ellipse id="blobC" cx="1050" cy="180" rx="380" ry="380" fill="url(#blobWhiteR)" filter="url(#blurL)"/>
+  </g>
+  <rect width="1920" height="1080" fill="url(#vigR)"/>
+
+  <!-- ================= 镜头世界（窗口 + 标注） ================= -->
+  <g id="world">
+    <g id="winGlowG" transform="translate(960 540)" opacity="0">
+      <ellipse cx="0" cy="0" rx="470" ry="560" fill="url(#winGlowR)"/>
+    </g>
+    <g id="window">
+      <g id="winInner" transform="translate(-204 -330)">
+        <rect id="winCard" x="0" y="0" width="408" height="660" rx="16" fill="#ffffff" fill-opacity="0.9" stroke="rgba(255,255,255,0.85)" stroke-width="1.5" filter="url(#winShadow)"/>
+        <g id="winContent" clip-path="url(#winClipA)">
+          <!-- 标题栏 + 状态栏 -->
+          <g id="wcTop">
+            <text x="14" y="26" font-size="14" font-weight="700" fill="#1f2937" letter-spacing="0.5">作业日程</text>
+            <g id="tbEdgeIcon" transform="translate(367 19)"><path d="M2 0 L10 6 L2 12 Z" fill="none" stroke="#6b7280" stroke-width="1.6" stroke-linejoin="round"/></g>
+            <g id="tbGearIcon" transform="translate(386 18)">
+              <circle cx="7" cy="7" r="3.4" fill="none" stroke="#6b7280" stroke-width="1.6"/>
+              <g stroke="#6b7280" stroke-width="1.6"><path d="M7 0.6 V2.4"/><path d="M7 11.6 V13.4"/><path d="M0.6 7 H2.4"/><path d="M11.6 7 H13.4"/><path d="M2.5 2.5 L3.8 3.8"/><path d="M10.2 10.2 L11.5 11.5"/><path d="M11.5 2.5 L10.2 3.8"/><path d="M3.8 10.2 L2.5 11.5"/></g>
+            </g>
+            <rect x="0" y="37" width="408" height="24" fill="rgba(37,99,235,0.10)"/>
+            <text id="statusText" x="14" y="53" font-size="12" fill="#1e40af">上次同步 2026-09-14 11:30</text>
+            <g id="syncG" transform="translate(392 49)" opacity="0">
+              <g id="syncSpin">
+                <path d="M0 -6 A6 6 0 1 1 -5.2 3" fill="none" stroke="#1e40af" stroke-width="1.7" stroke-linecap="round"/>
+                <path d="M-7.4 1.2 L-5.2 3.6 L-2.6 1.8 Z" fill="#1e40af"/>
+              </g>
+            </g>
+          </g>
+          <!-- 月份导航 + 星期头 -->
+          <g id="wcNav">
+            <g id="navPrev" transform="translate(11 68)"><path d="M8 0 L0 7 L8 14 Z" fill="#6b7280"/></g>
+            <text x="30" y="81" font-size="14" font-weight="600" fill="#1f2937">2026年9月</text>
+            <g id="navNext" transform="translate(316 68)"><path d="M0 0 L8 7 L0 14 Z" fill="#6b7280"/></g>
+            <rect id="todayBtn" x="340" y="63" width="54" height="24" rx="9" fill="none" stroke="rgba(31,41,55,0.10)"/>
+            <text x="367" y="79" font-size="12" fill="#6b7280" text-anchor="middle">今天</text>
+            <g id="weekhead" font-size="12" fill="#6b7280" text-anchor="middle">
+              <text x="37.7" y="106">一</text><text x="93.1" y="106">二</text><text x="148.6" y="106">三</text><text x="204" y="106">四</text><text x="259.4" y="106">五</text><text x="314.9" y="106">六</text><text x="370.3" y="106">日</text>
+            </g>
+          </g>
+          <!-- 月历（JS 构建） -->
+          <g id="wcCal"></g>
+          <!-- 日面板 -->
+          <g id="wcDay">
+            <line x1="0" y1="398" x2="408" y2="398" stroke="rgba(31,41,55,0.10)" stroke-width="1"/>
+            <text x="14" y="419" font-size="13" font-weight="600" fill="#1f2937">9月14日 · 周一</text>
+            <rect x="306" y="403" width="90" height="24" rx="9" fill="#2563eb"/>
+            <text x="351" y="419" font-size="12" fill="#ffffff" text-anchor="middle">＋ 添加日程</text>
+            <g id="dlp1"></g>
+            <g id="dlp2" opacity="0"></g>
+            <g id="dayPager">
+              <g transform="translate(174 634)"><path d="M8 0 L0 7 L8 14 Z" fill="#374151"/></g>
+              <circle id="pd0" cx="198" cy="641" r="4" fill="#2563eb"/>
+              <circle id="pd0ring" cx="198" cy="641" r="6" fill="none" stroke="rgba(37,99,235,0.16)" stroke-width="2"/>
+              <circle id="pd1" cx="212" cy="641" r="4" fill="rgba(31,41,55,0.28)"/>
+              <circle id="pd1ring" cx="212" cy="641" r="6" fill="none" stroke="rgba(37,99,235,0.16)" stroke-width="2" opacity="0"/>
+              <g transform="translate(232 634)"><path d="M0 0 L8 7 L0 14 Z" fill="#374151"/></g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+    <!-- S3 标注（2× 行高；世界坐标，JS 定位） -->
+    <g id="anno" opacity="0">
+      <line id="annoT" x1="770" y1="676" x2="1245" y2="676" stroke="rgba(147,197,253,0.75)" stroke-width="1.5" stroke-dasharray="7 6"/>
+      <line id="annoB" x1="770" y1="764" x2="1245" y2="764" stroke="rgba(147,197,253,0.75)" stroke-width="1.5" stroke-dasharray="7 6"/>
+      <line id="annoV" x1="1245" y1="676" x2="1245" y2="764" stroke="#93c5fd" stroke-width="2"/>
+      <line x1="1238" y1="676" x2="1252" y2="676" stroke="#93c5fd" stroke-width="2"/>
+      <line id="annoBTick" x1="1238" y1="764" x2="1252" y2="764" stroke="#93c5fd" stroke-width="2"/>
+      <text x="1262" y="728" font-size="24" font-weight="600" fill="#93c5fd">2×</text>
+    </g>
+  </g>
+
+  <!-- ================= S1 开场 ================= -->
+  <g id="s1">
+    <g id="s1Inner">
+      <g id="s1Glyph" stroke="#cbd5e1" stroke-width="2.5" fill="none" stroke-linecap="round">
+        <rect id="gBody" x="885" y="230" width="150" height="132" rx="22" pathLength="1"/>
+        <line id="gHead" x1="885" y1="264" x2="1035" y2="264" pathLength="1"/>
+        <rect id="gRing1" x="915" y="214" width="12" height="28" rx="6" pathLength="1"/>
+        <rect id="gRing2" x="993" y="214" width="12" height="28" rx="6" pathLength="1"/>
+      </g>
+      <g id="s1Dots" opacity="0">
+        <circle cx="912" cy="292" r="4.5" fill="#94a3b8"/><circle cx="960" cy="292" r="4.5" fill="#60a5fa"/><circle cx="1008" cy="292" r="4.5" fill="#94a3b8"/>
+        <circle cx="912" cy="324" r="4.5" fill="#94a3b8"/><circle cx="960" cy="324" r="4.5" fill="#94a3b8"/><circle cx="1008" cy="324" r="4.5" fill="#7c3aed"/>
+      </g>
+      <text id="s1Title" x="960" y="482" font-size="132" font-weight="700" fill="#f8fafc" text-anchor="middle" letter-spacing="18">作业日程</text>
+      <text id="s1Sub" x="960" y="548" font-size="34" fill="#8b93a7" text-anchor="middle" letter-spacing="2">SUSTech 作业·日程桌面小组件</text>
+      <line id="s1Line" x1="960" y1="584" x2="960" y2="584" stroke="#334155" stroke-width="1.5"/>
+    </g>
+  </g>
+
+  <!-- ================= S4 提醒气泡 ================= -->
+  <g id="s4" opacity="0">
+    <g id="bubble">
+      <rect x="1260" y="170" width="581" height="188" rx="26" fill="#ffffff" fill-opacity="0.97" filter="url(#softSh)"/>
+      <rect x="1260" y="170" width="9" height="188" fill="#2563eb" clip-path="url(#bubClipA)"/>
+      <text id="bubTitle" x="1291" y="222" font-size="30" font-weight="600" fill="#1f2937">🔔 计算机安全 · Lab 2</text>
+      <text id="bubSub" x="1291" y="266" font-size="26" fill="#6b7280">明天 23:59 截止</text>
+      <g id="bubBtnSnooze"><rect x="0" y="0" width="96" height="53" rx="12" fill="none" stroke="rgba(31,41,55,0.14)" stroke-width="1.5"/><text x="48" y="35" font-size="24" fill="#6b7280" text-anchor="middle">稍后</text></g>
+      <g id="bubBtnOk"><rect x="0" y="0" width="118" height="53" rx="12" fill="#2563eb"/><text x="59" y="35" font-size="24" fill="#ffffff" text-anchor="middle">知道了</text></g>
+    </g>
+    <text id="cap1" x="1841" y="410" font-size="24" fill="#8b93a7" text-anchor="end" opacity="0">应用内气泡 / 系统通知</text>
+  </g>
+
+  <!-- ================= S5 个性化 + 托盘 ================= -->
+  <g id="s5" opacity="0">
+    <!-- 设置面板 -->
+    <g id="setPanel" transform="translate(1990 150)">
+      <rect x="0" y="0" width="512" height="470" rx="24" fill="#ffffff" fill-opacity="0.97" filter="url(#softSh)"/>
+      <text x="28" y="52" font-size="24" font-weight="700" fill="#1f2937">设置</text>
+      <text x="28" y="98" font-size="20" font-weight="600" fill="#1f2937">窗口</text>
+      <line x1="28" y1="108" x2="484" y2="108" stroke="rgba(31,41,55,0.10)"/>
+      <rect id="cbTop" x="28" y="122" width="22" height="22" rx="6" fill="#2563eb"/>
+      <path d="M33 133 L38 138 L45 128" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="60" y="139" font-size="19" fill="#6b7280">窗口置顶</text>
+      <text x="28" y="186" font-size="19" fill="#6b7280">窗口透明度</text>
+      <rect x="28" y="206" width="340" height="6" rx="3" fill="rgba(31,41,55,0.12)"/>
+      <rect id="opFill" x="28" y="206" width="300" height="6" rx="3" fill="#2563eb" fill-opacity="0.45"/>
+      <circle id="opThumb" cx="328" cy="209" r="11" fill="#2563eb"/>
+      <text id="opVal" x="484" y="217" font-size="19" fill="#1f2937" text-anchor="end">95%</text>
+      <text x="28" y="268" font-size="19" fill="#6b7280">窗口缩放（40% – 150%）</text>
+      <rect x="28" y="288" width="250" height="6" rx="3" fill="rgba(31,41,55,0.12)"/>
+      <rect id="scFill" x="28" y="288" width="228" height="6" rx="3" fill="#2563eb" fill-opacity="0.45"/>
+      <circle id="scThumb" cx="256" cy="291" r="11" fill="#2563eb"/>
+      <text id="scVal" x="484" y="299" font-size="19" fill="#1f2937" text-anchor="end">100%（408×760）</text>
+      <rect x="28" y="380" width="126" height="48" rx="14" fill="#2563eb"/>
+      <text x="91" y="411" font-size="20" fill="#ffffff" text-anchor="middle">保存</text>
+      <rect x="170" y="380" width="126" height="48" rx="14" fill="none" stroke="rgba(31,41,55,0.14)"/>
+      <text x="233" y="411" font-size="20" fill="#6b7280" text-anchor="middle">关闭</text>
+    </g>
+    <!-- 右缘唤出条 -->
+    <g id="edgeTab" opacity="0">
+      <rect x="1902" y="470" width="18" height="140" rx="9" fill="rgba(255,255,255,0.94)" filter="url(#cardSh)"/>
+      <path d="M1916 532 L1908 540 L1916 548" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <!-- 托盘图标 + 菜单 -->
+    <g id="trayG" opacity="0">
+      <g id="trayIcon" transform="translate(1856 1012) scale(0.44) translate(-50 -50)"><use href="#appIconArt"/></g>
+      <ellipse cx="1856" cy="1058" rx="34" ry="7" fill="#000" opacity="0.35"/>
+    </g>
+    <g id="trayMenu" opacity="0">
+      <rect x="1596" y="756" width="264" height="196" rx="16" fill="#ffffff" fill-opacity="0.98" filter="url(#softSh)"/>
+      <rect id="menuHi" x="1610" y="830" width="236" height="42" rx="10" fill="rgba(37,99,235,0.10)" opacity="0"/>
+      <text id="menuItem0" x="1634" y="810" font-size="22" fill="#1f2937">显示 / 隐藏</text>
+      <text id="menuItem1" x="1634" y="862" font-size="22" fill="#1f2937">立即同步</text>
+      <line id="menuSep" x1="1616" y1="890" x2="1840" y2="890" stroke="rgba(31,41,55,0.12)"/>
+      <text id="menuItem2" x="1634" y="932" font-size="22" fill="#1f2937">退出</text>
+    </g>
+  </g>
+
+  <!-- ================= S6 收尾 CTA ================= -->
+  <g id="s6" opacity="0">
+    <g id="s6Cards"></g>
+    <g id="s6Glow" opacity="0"><ellipse cx="960" cy="330" rx="240" ry="240" fill="url(#winGlowR)"/></g>
+    <g id="s6Logo" transform="translate(900 270)"><use href="#appIconArt" transform="scale(1.2)"/></g>
+    <text id="s6Title" x="960" y="530" font-size="96" font-weight="700" fill="#f8fafc" text-anchor="middle" letter-spacing="8">作业日程</text>
+    <g id="s6Badge">
+      <rect id="badgeRect" x="0" y="0" width="190" height="48" rx="24" fill="rgba(37,99,235,0.14)" stroke="rgba(96,165,250,0.40)"/>
+      <text id="badgeText" x="0" y="0" font-size="26" font-weight="600" fill="url(#ghGrad)" text-anchor="middle">开源 · 免费</text>
+    </g>
+    <g id="s6Gh">
+      <rect id="ghRect" x="0" y="0" width="620" height="58" rx="29" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.16)"/>
+      <g id="ghIcon" stroke="#cbd5e1" stroke-width="2.4" fill="none" stroke-linecap="round">
+        <circle cx="0" cy="0" r="4"/><circle cx="26" cy="-10" r="4"/><circle cx="26" cy="10" r="4"/>
+        <path d="M0 4 V10 A6 6 0 0 0 6 16 H20 A6 6 0 0 0 26 10 V-6"/>
+      </g>
+      <text id="ghText" x="0" y="0" font-size="26" fill="#cbd5e1" text-anchor="middle" letter-spacing="0.5">github.com/2233-123/sustech-homework-calendar</text>
+    </g>
+    <text id="s6Tags" x="960" y="752" font-size="22" fill="#8b93a7" text-anchor="middle" opacity="0">便携版 / 安装版</text>
+    <text id="s6Extra" x="960" y="790" font-size="20" fill="#64748b" text-anchor="middle" opacity="0">本地 CAS 登录 · BB 只读同步</text>
+  </g>
+
+  <rect id="fade" width="1920" height="1080" fill="#000000" opacity="0" pointer-events="none"/>
+</svg>
+</div>
+
+<script>
+(function () {
+"use strict";
+const NS = "http://www.w3.org/2000/svg";
+const q = (id) => document.getElementById(id);
+const mk = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) if (attrs[k] !== undefined) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const mkt = (parent, attrs, str) => { const t = mk("text", attrs, parent); t.textContent = str; return t; };
+
+/* ---------- 时间/缓动 ---------- */
+const clamp01 = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
+const S = (t0, t1, t) => clamp01((t - t0) / (t1 - t0));
+const lerp = (a, b, p) => a + (b - a) * p;
+function bezier(x1, y1, x2, y2) {
+  const A = (a, b) => 1 - 3 * b + 3 * a, B = (a, b) => 3 * b - 6 * a, C = (a) => 3 * a;
+  const calc = (t, a, b) => ((A(a, b) * t + B(a, b)) * t + C(a)) * t;
+  const slope = (t, a, b) => 3 * A(a, b) * t * t + 2 * B(a, b) * t + C(a);
+  return (x) => { let t = x; for (let i = 0; i < 8; i++) { const s = slope(t, x1, x2); if (Math.abs(s) < 1e-6) break; t -= (calc(t, x1, x2) - x) / s; } return calc(t, y1, y2); };
+}
+const EO = bezier(0.22, 1, 0.36, 1), EIO = bezier(0.65, 0, 0.35, 1), EI = bezier(0.4, 0, 1, 1);
+function spring(u) {
+  if (u <= 0) return 0; if (u >= 1) return 1;
+  const z = 0.72, w = 9.5, wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * u) * (Math.cos(wd * u) + (z * w / wd) * Math.sin(wd * u));
+}
+const pulse = (t, t0, dur) => { const p = S(t0, t0 + dur / 2, t) * (1 - S(t0 + dur / 2, t0 + dur, t)); return p; };
+
+/* ---------- 布局常量 ---------- */
+const WIN_W = 408, WIN_H = 660;              // 窗口复刻原生尺寸（含日面板 padding-bottom 12 的自然高度）
+const WIN_SC = 1.32;                          // 舞台上缩放
+const WIN_CX = 960, WIN_CY = 540;             // 窗口中心（舞台坐标，标称高度时）
+const CEL = { x0: 10, y0: 113, size: (408 - 20 - 6 * 3) / 7, gap: 3, r: 12 };
+const ROW1_Y = 431, ROW_H = 66;               // 日列表 page1 行
+const ROW_DIFF = 99;                          // page1(3×BB=198) − page2(自建33+BB66=99)：自适应高度差
+const WIN_TOP = WIN_CY - (WIN_H / 2) * WIN_SC; // 窗口顶边（高度变化时底边随之收起）
+
+/* ---------- 引用表 ---------- */
+const R = {};
+["blobA","blobB","blobC","world","winGlowG","window","winInner","winCard","winContent","wcTop","wcNav","wcCal","wcDay","statusText","syncG","syncSpin","dlp1","dlp2",
+ "anno","s1","s1Inner","s1Glyph","s1Dots","s1Title","s1Sub","s1Line","s4","bubble","cap1","s5","setPanel","edgeTab","trayG","trayIcon","trayMenu","menuHi","menuItem0","menuItem1","menuItem2","menuSep",
+ "s6","s6Cards","s6Glow","s6Logo","s6Title","s6Badge","s6Gh","s6Tags","s6Extra","fade","opThumb","opFill","opVal","scThumb","scFill","scVal",
+ "pd0","pd1","pd0ring","pd1ring","dayPager","bubBtnSnooze","bubBtnOk","badgeRect","badgeText","ghRect","ghText","ghIcon"].forEach((id) => { R[id] = q(id); });
+
+/* ---------- 月历（2026-09，周一起始，今日 9/14 选中） ---------- */
+const CELLS = [];
+(function buildCalendar() {
+  const g = R.wcCal;
+  const nums = []; // [label, outOfMonth]
+  nums.push(["31", true]);
+  for (let d = 1; d <= 30; d++) nums.push([String(d), false]);
+  for (let d = 1; d <= 4; d++) nums.push([String(d), true]);
+  const dots = { 14: ["#fff", "#fff", "#fff"], 15: ["#2563eb"], 16: ["#7c3aed"], 18: ["#7c3aed", "#7c3aed"], 21: ["#2563eb", "#7c3aed"], 25: ["#7c3aed"], 28: ["#2563eb"], 30: ["#7c3aed", "#7c3aed"] };
+  nums.forEach(([label, out], i) => {
+    const col = i % 7, row = (i / 7) | 0;
+    const x = CEL.x0 + col * (CEL.size + CEL.gap), y = CEL.y0 + row * (CEL.size + CEL.gap);
+    const cx = x + CEL.size / 2, cy = y + CEL.size / 2;
+    const day = Number(label);
+    const selected = !out && day === 14;
+    const cell = mk("g", {}, g);
+    const rect = mk("rect", { x, y, width: CEL.size, height: CEL.size, rx: CEL.r, fill: selected ? "#2563eb" : "transparent" }, cell);
+    if (selected) R.selRect = rect;
+    mkt(cell, { x: cx, y: cy + 4.5, "font-size": 13, "text-anchor": "middle", fill: selected ? "#ffffff" : out ? "rgba(107,114,128,0.45)" : "#1f2937" }, label);
+    const ds = dots[selected ? 14 : day];
+    if (ds && !out) {
+      const w = ds.length * 4.5 + (ds.length - 1) * 4;
+      ds.forEach((color, k) => mk("circle", { cx: cx - w / 2 + 2.25 + k * 8.5, cy: y + CEL.size - 8, r: 2.25, fill: selected ? "#ffffff" : color }, cell));
+    }
+  });
+})();
+
+/* ---------- 日列表（page1：3 × BB 行；page2：自建 + BB） ---------- */
+const HUES = { "计算机安全": 210, "数据结构与算法": 120, "大学物理（下）": 10, "线性代数": 300 };
+const contrastText = (h) => (h >= 15 && h <= 210) ? "#1f2937" : "#ffffff";
+function buildRows(pageG, items) {
+  const out = [];
+  let y = ROW1_Y;
+  items.forEach((it) => {
+    const rowG = mk("g", {}, pageG);
+    if (it.kind === "bb") {
+      mkt(rowG, { x: 22, y: y + 26, "font-size": 12, fill: "#6b7280" }, it.time);
+      const hue = HUES[it.course], fill = `hsl(${hue},72%,52%)`, tc = contrastText(hue);
+      const chipG = mk("g", {}, rowG);
+      const chipRect = mk("rect", { x: 72, y: y + 11, width: 80, height: 19, rx: 7, fill }, chipG);
+      const chipT = mkt(chipG, { x: 80, y: y + 25, "font-size": 11, "font-weight": 600, fill: tc }, it.course);
+      const titleT = mkt(rowG, { x: 72, y: y + 48.5, "font-size": 14, fill: "#1f2937" }, it.title);
+      out.push({ g: rowG, chip: { g: chipG, rect: chipRect, text: chipT }, title: titleT, y });
+    } else {
+      mkt(rowG, { x: 22, y: y + 21, "font-size": 12, fill: "#6b7280" }, it.time);
+      const t = mkt(rowG, { x: 72, y: y + 21, "font-size": 14, fill: "#1f2937" }, it.title);
+      out.push({ g: rowG, title: t, y });
+    }
+    y += it.kind === "bb" ? ROW_H : 33; // 行高堆叠（常规 33 / BB 66）
+  });
+  return out;
+}
+const page1 = buildRows(R.dlp1, [
+  { kind: "bb", time: "23:59", course: "计算机安全", title: "Lab 2" },
+  { kind: "bb", time: "23:59", course: "数据结构与算法", title: "作业 3" },
+  { kind: "bb", time: "23:59", course: "大学物理（下）", title: "第 2 章习题" },
+]);
+const page2 = buildRows(R.dlp2, [
+  { kind: "self", time: "19:00", title: "小组会议" },
+  { kind: "bb", time: "23:59", course: "线性代数", title: "作业 2" },
+]);
+
+// chip 宽度依赖字体度量：统一在 refit 中重排（字体就绪后再跑一次，保证栅格化一致）
+function refitChips() {
+  [page1, page2].forEach((page) => page.forEach((row) => {
+    if (!row.chip) return;
+    const tw = row.chip.text.getComputedTextLength();
+    row.chip.rect.setAttribute("width", String(tw + 16));
+  }));
+}
+refitChips();
+
+/* ---------- S4 气泡按钮定位（右对齐、定间距） ---------- */
+(function layoutBubble() {
+  const btnY = 283;
+  R.bubBtnOk.setAttribute("transform", `translate(1701 ${btnY})`);
+  R.bubBtnSnooze.setAttribute("transform", `translate(1591 ${btnY})`);
+})();
+
+/* ---------- S6 卡片与标题块布局 ---------- */
+const CARDS = [];
+(function buildCards() {
+  const labels = ["自动同步", "智能提醒", "颜值自定义", "托盘常驻"];
+  labels.forEach((label, i) => {
+    const x = 260 + i * 360, y = 812;
+    const g = mk("g", {}, R.s6Cards);
+    mk("rect", { x, y, width: 320, height: 150, rx: 20, fill: "rgba(255,255,255,0.95)", stroke: "rgba(255,255,255,0.55)", "stroke-width": 1.5, filter: "url(#cardSh)" }, g);
+    const icon = mk("g", { transform: `translate(${x + 30} ${y + 53})`, stroke: "#2563eb", "stroke-width": 2.6, fill: "none", "stroke-linecap": "round", "stroke-linejoin": "round" }, g);
+    if (i === 0) { // 自动同步
+      mk("path", { d: "M2 14 A14 14 0 0 1 26 8" }, icon);
+      mk("path", { d: "M28 26 A14 14 0 0 1 4 22" }, icon);
+      mk("path", { d: "M26 2 L26 9 L19 9", fill: "none" }, icon);
+      mk("path", { d: "M4 30 L4 23 L11 23", fill: "none" }, icon);
+    } else if (i === 1) { // 智能提醒（铃）
+      mk("path", { d: "M15 4 C9 4 6 9 6 14 C6 20 4 22 3 24 H27 C26 22 24 20 24 14 C24 9 21 4 15 4 Z" }, icon);
+      mk("path", { d: "M12 27 A3.5 3.5 0 0 0 18 27" }, icon);
+      mk("line", { x1: 15, y1: 0.5, x2: 15, y2: 3 }, icon);
+    } else if (i === 2) { // 颜值自定义（滑杆）
+      mk("line", { x1: 0, y1: 8, x2: 30, y2: 8 }, icon); mk("circle", { cx: 20, cy: 8, r: 4, fill: "#ffffff" }, icon);
+      mk("line", { x1: 0, y1: 18, x2: 30, y2: 18 }, icon); mk("circle", { cx: 10, cy: 18, r: 4, fill: "#ffffff" }, icon);
+      mk("line", { x1: 0, y1: 28, x2: 30, y2: 28 }, icon); mk("circle", { cx: 24, cy: 28, r: 4, fill: "#ffffff" }, icon);
+    } else { // 托盘常驻
+      mk("rect", { x: 0, y: 4, width: 32, height: 26, rx: 6 }, icon);
+      mk("rect", { x: 11, y: 12, width: 10, height: 10, rx: 2.5, fill: "#2563eb", stroke: "none" }, icon);
+    }
+    mkt(g, { x: x + 88, y: y + 88, "font-size": 26, "font-weight": 600, fill: "#1f2937" }, label);
+    CARDS.push({ g, x, y });
+  });
+})();
+function layoutS6() {
+  // 「开源 · 免费」胶囊
+  const bw = R.badgeText.getComputedTextLength() + 56;
+  R.badgeRect.setAttribute("width", bw); R.badgeRect.setAttribute("x", 960 - bw / 2); R.badgeRect.setAttribute("y", 570);
+  R.badgeText.setAttribute("x", 960); R.badgeText.setAttribute("y", 603);
+  // GitHub 胶囊：pad 30 / 图标块 34 / 间隔 16 / 文字 tw
+  const tw = R.ghText.getComputedTextLength();
+  const gw = 30 + 34 + 16 + tw + 30, gy = 646, gx = 960 - gw / 2;
+  R.ghRect.setAttribute("width", gw); R.ghRect.setAttribute("x", gx); R.ghRect.setAttribute("y", gy);
+  R.ghIcon.setAttribute("transform", `translate(${gx + 30 + 17} ${gy + 29})`);
+  R.ghText.setAttribute("x", gx + 30 + 34 + 16 + tw / 2);
+  R.ghText.setAttribute("y", gy + 39);
+}
+layoutS6();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { refitChips(); layoutS6(); renderFrame(lastT); });
+
+/* ---------- 各场景更新 ---------- */
+function bgUpdate(t) {
+  R.blobA.setAttribute("cx", 520 + 90 * Math.sin(0.21 * t));
+  R.blobA.setAttribute("cy", 330 + 70 * Math.cos(0.17 * t));
+  R.blobB.setAttribute("cx", 1480 + 110 * Math.cos(0.19 * t + 1.1));
+  R.blobB.setAttribute("cy", 800 + 80 * Math.sin(0.15 * t + 2.2));
+  R.blobC.setAttribute("cx", 1050 + 70 * Math.sin(0.13 * t + 3.0));
+  R.blobC.setAttribute("cy", 180 + 60 * Math.cos(0.23 * t + 0.7));
+}
+
+function s1Update(t) {
+  const on = t < 4.05;
+  R.s1.style.display = on ? "" : "none";
+  if (!on) return;
+  const draw = EO(S(0.35, 1.5, t));
+  ["gBody", "gHead", "gRing1", "gRing2"].forEach((id) => {
+    const el = q(id);
+    el.setAttribute("stroke-dasharray", "1 1");
+    el.setAttribute("stroke-dashoffset", String(1 - draw));
+  });
+  const exit = EIO(S(3.25, 3.9, t));
+  const glyphIn = S(0.25, 0.75, t);
+  R.s1Glyph.setAttribute("opacity", String(glyphIn * (1 - exit)));
+  R.s1Glyph.setAttribute("transform", `translate(960 296) translate(0 ${6 * Math.sin(2.2 * t) - 26 * exit}) translate(-960 -296)`);
+  R.s1Dots.setAttribute("opacity", String(S(1.1, 1.6, t) * (1 - exit)));
+  const pT = EO(S(0.55, 1.35, t)), eT = EIO(S(3.3, 3.95, t));
+  R.s1Title.setAttribute("opacity", String(pT * (1 - eT)));
+  R.s1Title.setAttribute("transform", `translate(0 ${(1 - pT) * 60 - 24 * eT})`);
+  R.s1Title.setAttribute("letter-spacing", String(lerp(18, 6, EO(S(0.55, 1.6, t)))));
+  const pS = EO(S(0.85, 1.55, t)), eS = EIO(S(3.35, 4.0, t));
+  R.s1Sub.setAttribute("opacity", String(pS * (1 - eS)));
+  R.s1Sub.setAttribute("transform", `translate(0 ${(1 - pS) * 40 - 18 * eS})`);
+  const pL = EIO(S(1.0, 1.5, t));
+  R.s1Line.setAttribute("x1", String(960 - 62 * pL));
+  R.s1Line.setAttribute("x2", String(960 + 62 * pL));
+  R.s1Line.setAttribute("opacity", String(1 - eS));
+}
+
+// 窗口：升起 + 内容装配 + 演示（透明度/缩放/贴边）+ 高度自适应 + 退场
+function windowUpdate(t) {
+  const gone = t > 25.15;
+  R.window.style.display = gone ? "none" : "";
+  R.winGlowG.style.display = gone ? "none" : "";
+  if (gone) return;
+  const riseP = spring(S(3.6, 5.3, t));
+  const wy = (1 - riseP) * 400;
+  const wsx = lerp(1.05, 1, riseP), wsy = lerp(0.90, 1, riseP);
+  // 透明度演示（20.5–21.45）
+  const opP = S(20.5, 21.0, t) * (1 - S(21.0, 21.45, t));
+  const demoOp = lerp(1, 0.63, EIO(opP));
+  // 缩放演示（21.45–22.4）
+  const scP = S(21.45, 21.95, t) * (1 - S(21.95, 22.4, t));
+  const demoS = lerp(1, 0.6, EIO(scP));
+  // 贴边收起 / 唤回（22.5–23.9）
+  const hideP = EIO(S(22.5, 23.05, t)) * (1 - EIO(S(23.35, 23.9, t)));
+  const wx = 1450 * hideP;
+  // 翻到第 2 页（行数更少）时窗口高度自适应：底边上收（顶边固定，对齐应用真实行为）
+  const hp2 = EIO(S(12.35, 13.05, t));
+  const H = WIN_H - ROW_DIFF * hp2;
+  R.winCard.setAttribute("height", H.toFixed(1));
+  q("winClipA").firstElementChild.setAttribute("height", H.toFixed(1));
+  R.winInner.setAttribute("transform", `translate(-204 ${(-H / 2).toFixed(1)})`);
+  R.dayPager.setAttribute("transform", `translate(0 ${(-ROW_DIFF * hp2).toFixed(1)})`);
+  const wcy = WIN_TOP + (H / 2) * WIN_SC + wy;
+  const fadeOut = 1 - S(24.5, 25.1, t);
+  const wop = S(3.6, 4.1, t) * demoOp * fadeOut;
+  R.window.setAttribute("transform", `translate(${WIN_CX + wx} ${wcy.toFixed(2)}) scale(${(WIN_SC * wsx * demoS).toFixed(4)} ${(WIN_SC * wsy * demoS).toFixed(4)})`);
+  R.window.setAttribute("opacity", String(wop));
+  R.winGlowG.setAttribute("opacity", String(0.85 * S(4.0, 5.2, t) * (1 - hideP) * fadeOut * (0.92 + 0.08 * Math.sin(1.4 * t))));
+  // 内容装配
+  [ "wcTop", "wcNav", "wcCal", "wcDay" ].forEach((id, i) => {
+    const p = EO(S(4.5 + i * 0.22, 5.1 + i * 0.22, t));
+    const el = R[id];
+    el.setAttribute("opacity", String(p));
+    el.setAttribute("transform", `translate(0 ${((1 - p) * 14).toFixed(2)})`);
+  });
+}
+
+function camUpdate(t) {
+  let k = 1, dx = 0, dy = 0;
+  const zoomIn = EIO(S(8.8, 9.6, t)), zoomOut = EIO(S(13.6, 14.1, t));
+  const push = S(5.5, 8.8, t);
+  if (t < 8.8) k = lerp(1, 1.03, push);
+  else if (t < 13.6) {
+    k = lerp(lerp(1, 1.03, push), 1.42 + 0.03 * S(9.6, 13.6, t), zoomIn);
+    dy = -292 * zoomIn;
+  } else {
+    const back = zoomOut;
+    k = lerp(1.45, 1, back); dy = -292 * (1 - back);
+  }
+  if (t >= 14 && t < 24.5) k = 1;
+  if (t >= 24.5) k = lerp(1, 1.02, S(25, 29.5, t));
+  R.world.setAttribute("transform", `translate(${(WIN_CX * (1 - k) + dx).toFixed(3)} ${(540 * (1 - k) + dy).toFixed(3)}) scale(${k.toFixed(4)})`);
+}
+
+function s3Update(t) {
+  // 状态栏：S3 演示「同步中…」→「上次同步 2026-09-14 12:03」（8.55 起可见，避免镜头推近后出画）
+  if (t >= 8.55 && t < 11.05) {
+    R.statusText.textContent = "同步中…";
+    R.syncG.setAttribute("opacity", "1");
+    R.syncSpin.setAttribute("transform", `rotate(${((t - 8.55) * 400) % 360})`);
+  } else if (t >= 11.05) {
+    R.statusText.textContent = "上次同步 2026-09-14 12:03";
+    R.syncG.setAttribute("opacity", "0");
+  } else {
+    R.statusText.textContent = "上次同步 2026-09-14 11:30";
+    R.syncG.setAttribute("opacity", "0");
+  }
+  // 选中格脉冲（镜头推近落定时的轻弹）
+  const cel = pulse(t, 9.0, 0.9);
+  if (R.selRect) R.selRect.setAttribute("transform", `translate(204 ${CEL.y0 + 2 * (CEL.size + CEL.gap) + CEL.size / 2}) scale(${1 + 0.05 * cel}) translate(-204 ${-(CEL.y0 + 2 * (CEL.size + CEL.gap) + CEL.size / 2)})`);
+  // 列表刷新：镜头落定后 9.6 淡出 → 10.15 错落入场 → 10.95 chip 弹入（同步完成的“新数据”揭示）
+  const refreshOut = EI(S(9.6, 10.05, t));
+  page1.forEach((row, i) => {
+    const p = EO(S(10.15 + i * 0.27, 10.65 + i * 0.27, t));
+    const rowOp = (1 - refreshOut) + refreshOut * p;
+    row.g.setAttribute("opacity", String(rowOp));
+    row.g.setAttribute("transform", `translate(0 ${(refreshOut * (1 - p) * 14).toFixed(2)})`);
+    if (row.chip) {
+      const chipOp = (1 - refreshOut) + refreshOut * clamp01(S(10.95 + i * 0.22, 11.3 + i * 0.22, t) * 2);
+      const sp = spring(S(10.95 + i * 0.22, 11.6 + i * 0.22, t));
+      const cx = Number(row.chip.rect.getAttribute("x")) + Number(row.chip.rect.getAttribute("width")) / 2;
+      const cy = row.y + 20.5;
+      row.chip.g.setAttribute("transform", `translate(${cx} ${cy}) scale(${(0.6 + 0.4 * sp).toFixed(3)}) rotate(${(-4 + 4 * sp).toFixed(2)}) translate(${-cx} ${-cy})`);
+      row.chip.g.setAttribute("opacity", String(chipOp));
+      row.title.setAttribute("opacity", String((1 - refreshOut) + refreshOut * S(11.1 + i * 0.22, 11.5 + i * 0.22, t)));
+    }
+  });
+  // 2× 行高标注：向下“量出”（顶线固定、底线与竖线随进度生长；翻页前退场，避免误标第 2 页自建行）
+  const pa = EO(S(11.2, 11.8, t)) * (1 - EI(S(12.05, 12.35, t)));
+  R.anno.setAttribute("opacity", String(pa));
+  const pDraw = EO(S(11.2, 11.9, t));
+  const yTop = 676, yBot = 676 + 88 * pDraw;
+  q("annoT").setAttribute("y1", yTop); q("annoT").setAttribute("y2", yTop);
+  q("annoB").setAttribute("y1", yBot); q("annoB").setAttribute("y2", yBot);
+  q("annoV").setAttribute("y1", yTop); q("annoV").setAttribute("y2", yBot);
+  q("annoBTick").setAttribute("y1", yBot); q("annoBTick").setAttribute("y2", yBot);
+  // 翻页：12.35 第 1 页退出（与窗口收高同步），12.65 第 2 页滑入
+  const p1out = EI(S(12.35, 12.7, t));
+  const p2in = EO(S(12.65, 13.2, t));
+  R.dlp1.setAttribute("opacity", String(1 - p1out));
+  R.dlp1.setAttribute("transform", `translate(0 ${(-14 * p1out).toFixed(2)})`);
+  R.dlp2.setAttribute("opacity", String(p2in));
+  R.dlp2.setAttribute("transform", `translate(0 ${(14 * (1 - p2in)).toFixed(2)})`);
+  const pfDot = S(12.5, 12.65, t);
+  R.pd0.setAttribute("fill", pfDot > 0.5 ? "rgba(31,41,55,0.28)" : "#2563eb");
+  R.pd1.setAttribute("fill", pfDot > 0.5 ? "#2563eb" : "rgba(31,41,55,0.28)");
+  R.pd0ring.setAttribute("opacity", String(1 - pfDot));
+  R.pd1ring.setAttribute("opacity", String(pfDot));
+}
+
+function s4Update(t) {
+  const on = t >= 14.15 && t < 18.95;
+  R.s4.style.display = on ? "" : "none";
+  if (!on) return;
+  const inP = spring(S(14.3, 15.3, t)), inF = S(14.3, 14.8, t);
+  const outP = EI(S(17.5, 18.3, t));
+  const xo = (1 - inP) * 300, yo = (1 - inP) * -240 - 26 * outP;
+  R.bubble.setAttribute("transform", `translate(${xo.toFixed(2)} ${yo.toFixed(2)}) scale(${(1 + 0.02 * outP).toFixed(4)})`);
+  R.s4.setAttribute("opacity", String(inF * (1 - outP)));
+  const pp = pulse(t, 16.9, 0.5);
+  R.bubBtnOk.setAttribute("transform", `translate(1701 283) translate(59 26.5) scale(${(1 + 0.05 * pp).toFixed(3)}) translate(-59 -26.5)`);
+  R.cap1.setAttribute("opacity", String(S(15.6, 16.2, t) * (1 - S(18.2, 18.8, t))));
+}
+
+function s5Update(t) {
+  const on = t >= 19.55 && t < 24.55;
+  R.s5.style.display = on ? "" : "none";
+  if (!on) return;
+  R.s5.setAttribute("opacity", String(S(19.55, 19.75, t)));
+  // 设置面板（进 19.7–20.5；退 22.3–22.75，为贴边/托盘演示让位）
+  const pp = spring(S(19.7, 20.5, t)), pe = EI(S(22.3, 22.75, t));
+  const px = 1990 + (1370 - 1990) * pp + 640 * pe;
+  R.setPanel.setAttribute("transform", `translate(${px.toFixed(2)} 150)`);
+  R.setPanel.setAttribute("opacity", String(S(19.7, 20.05, t) * (1 - pe)));
+  // 透明度滑块
+  const opP = EIO(S(20.5, 21.0, t)) * (1 - EIO(S(21.0, 21.45, t)));
+  const opV = lerp(95, 60, opP);
+  const fOp = (opV / 100 - 0.3) / 0.7;
+  R.opThumb.setAttribute("cx", String(28 + 340 * fOp));
+  R.opFill.setAttribute("width", String(Math.max(0, 340 * fOp)));
+  R.opVal.textContent = Math.round(opV) + "%";
+  // 缩放滑块
+  const scP = EIO(S(21.45, 21.95, t)) * (1 - EIO(S(21.95, 22.4, t)));
+  const scV = lerp(100, 60, scP);
+  const fSc = (scV - 40) / 110;
+  R.scThumb.setAttribute("cx", String(28 + 250 * fSc));
+  R.scFill.setAttribute("width", String(Math.max(0, 250 * fSc)));
+  R.scVal.textContent = Math.round(scV) + "%（" + Math.round(408 * scV / 100) + "×" + Math.round(760 * scV / 100) + "）";
+  // 右缘唤出条（窗口贴边后出现 → 轻摆 → 点击唤回）
+  const etIn = S(22.75, 23.05, t), etOut = S(23.6, 23.9, t);
+  const wig = t > 23.05 && t < 23.4 ? 3.2 * Math.sin((t - 23.05) / 0.35 * Math.PI * 4) * Math.exp(-(t - 23.05) * 4) : 0;
+  const click = pulse(t, 23.3, 0.3);
+  R.edgeTab.setAttribute("opacity", String(etIn * (1 - etOut)));
+  R.edgeTab.setAttribute("transform", `translate(1920 540) scale(${(1 - 0.06 * click).toFixed(3)}) translate(-1920 -540) rotate(${wig.toFixed(2)} 1911 540)`);
+  // 托盘图标 + 菜单（窗口归位后再入场，避免与滑回窗口叠影）
+  const trIn = spring(S(23.7, 24.05, t));
+  R.trayG.setAttribute("opacity", String(S(23.7, 23.95, t) * (1 - S(24.4, 24.6, t))));
+  R.trayIcon.setAttribute("transform", `translate(1856 1012) scale(${(0.44 * (0.7 + 0.3 * trIn)).toFixed(4)}) translate(-50 -50)`);
+  const mIn = S(23.8, 24.1, t), mOut = EI(S(24.35, 24.6, t));
+  R.trayMenu.setAttribute("opacity", String(mIn * (1 - mOut)));
+  [R.menuItem0, R.menuItem1, R.menuItem2].forEach((el, i) => {
+    const pi = EO(S(23.8 + i * 0.12, 24.15 + i * 0.12, t));
+    el.setAttribute("opacity", String(pi));
+    el.setAttribute("transform", `translate(${((1 - pi) * 22).toFixed(2)} 0)`);
+  });
+  R.menuSep.setAttribute("opacity", String(EO(S(23.92, 24.27, t))));
+  R.menuHi.setAttribute("opacity", String(S(24.1, 24.3, t) * (1 - S(24.4, 24.55, t))));
+}
+
+function s6Update(t) {
+  const on = t >= 24.45;
+  R.s6.style.display = on ? "" : "none";
+  if (!on) return;
+  CARDS.forEach((card, i) => {
+    const t0 = 24.9 + i * 0.14;
+    const sp = spring(S(t0, t0 + 0.55, t));
+    const floatY = t > 26 ? 4 * Math.sin(2 * Math.PI * (t - t0) / 5.5 + i * 1.7) : 0;
+    card.g.setAttribute("opacity", String(S(t0, t0 + 0.3, t)));
+    card.g.setAttribute("transform", `translate(0 ${((1 - sp) * 70 + floatY).toFixed(2)})`);
+  });
+  const items = [
+    { el: R.s6Logo, t0: 25.5 }, { el: R.s6Title, t0: 25.62 }, { el: R.s6Badge, t0: 25.74 },
+    { el: R.s6Gh, t0: 25.86 }, { el: R.s6Tags, t0: 25.98 }, { el: R.s6Extra, t0: 26.08 },
+  ];
+  items.forEach(({ el, t0 }) => {
+    const p = EO(S(t0, t0 + 0.7, t));
+    el.setAttribute("opacity", String(p));
+    if (el === R.s6Logo) el.setAttribute("transform", `translate(900 ${270 + (1 - p) * 36})`);
+    else el.setAttribute("transform", `translate(0 ${((1 - p) * 36).toFixed(2)})`);
+  });
+  R.s6Glow.setAttribute("opacity", String(S(25.4, 26.2, t) * 0.9));
+  R.s6.setAttribute("opacity", "1");
+  R.fade.setAttribute("opacity", String(EIO(S(29.5, 30.0, t))));
+}
+
+/* ---------- 总帧函数 ---------- */
+let lastT = 0;
+function renderFrame(t) {
+  lastT = Math.max(0, Math.min(30, Number(t) || 0));
+  t = lastT;
+  bgUpdate(t);
+  windowUpdate(t);
+  camUpdate(t);
+  s3Update(t);
+  s1Update(t);
+  s4Update(t);
+  s5Update(t);
+  s6Update(t);
+}
+window.renderFrame = renderFrame;
+
+/* ---------- 启动 ---------- */
+renderFrame(new URLSearchParams(location.search).get("t") || 0);
+(function fit() {
+  const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+  q("stage").style.transform = `scale(${s})`;
+})();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "hw-calendar-promo-video",
+  "private": true,
+  "version": "0.1.0",
+  "description": "作业日程 30s 宣传片：SVG 时间轴（window.renderFrame(t)）+ headless Chromium 逐帧渲染 + ffmpeg H.264",
+  "scripts": {
+    "frames": "node render.js",
+    "keyframes": "node render.js --times 1.2,5.5,10.8,12.6,15.8,20.9,21.8,23.2,25.6,27.5,29.8"
+  },
+  "devDependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
+    "playwright-core": "^1.63.0"
+  }
+}
