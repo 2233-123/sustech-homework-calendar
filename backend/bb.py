@@ -168,21 +168,33 @@ def subtract_months(d: date, months: int) -> date:
 
 
 def pull_cutoff(months: int, today: date | None = None) -> str | None:
-    """拉取窗口下界（本地日期 'YYYY-MM-DD'）：今天 − months 个自然月；months<=0 → None（不限）。"""
+    """拉取窗口下界（本地日期 'YYYY-MM-DD'）：今天 − months 个自然月；months<=0 → None（不限）。
+
+    防御（本函数在课程级 try 之外调用，**不得向上抛错**）：
+    非法值回退 1 个月；months 钳制到 [0, 1200]（≈100 年，避免 `date()` 越界）；
+    任何计算异常同样回退 1 个月。
+    """
     try:
         m = int(months)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         m = 1
     if m <= 0:
         return None
-    return subtract_months(today or date.today(), m).isoformat()
+    m = min(m, 1200)
+    try:
+        return subtract_months(today or date.today(), m).isoformat()
+    except (ValueError, OverflowError, TypeError, OSError):
+        return subtract_months(date.today(), 1).isoformat()
 
 
 def content_visible(bb: "BBSession", course_id: str, content_id: str) -> bool:
     """内容可见性甄别（可用性而非班级启发式）。
 
     403（含"别的班"内容）/ 404（已删除或不存在）→ 不可见；
-    其余（5xx / 网络错误 / 非 JSON / 401 等）→ **fail-open 保留**，避免瞬时故障误删数据。
+    其余（5xx / 网络错误 / 非 JSON）→ **fail-open 保留**，避免瞬时故障误删数据；
+    重登后仍 401（SessionExpired）→ 保留（会话问题不属于"内容不可见"）。
+    注意：若重登时账号密码失效，`cas.InvalidCredentials` 会**向上传播**——由 service
+    捕获并清会话 → UI 显示登录失败（既有链路，与其它请求一致）。
     """
     try:
         bb.get_json(f"/learn/api/public/v1/courses/{course_id}/contents/{content_id}")
@@ -196,11 +208,12 @@ def content_visible(bb: "BBSession", course_id: str, content_id: str) -> bool:
 def fetch_assignments(bb: "BBSession", pull_months: int = 1) -> list:
     """拉取所有课程作业并归一化；单课程失败不影响其它课程。
 
-    三层过滤（全部在取 attempts 之前完成，被丢弃的列不发起 attempts/content 请求）：
+    三层过滤（全部在取 attempts 之前完成）：
     ① 仅 Attempts 型评分列（`get_assignment_columns` 已滤，含截止时间字段）；
     ② 无截止时间 → 丢弃（上游补 due 后下次同步会自动重新拉取）；
     ③ 截止时间早于「今天 − pull_months 个自然月」→ 丢弃（pull_months<=0 不限）；
     ④ 带 contentId 的列做内容可见性甄别：403/404 丢弃，其余 fail-open 保留。
+    请求数：②③ 丢弃列零 content/attempts 请求；④ 丢弃列仅 1 次 content 探测、零 attempts。
     """
     cutoff = pull_cutoff(pull_months)
     records = []

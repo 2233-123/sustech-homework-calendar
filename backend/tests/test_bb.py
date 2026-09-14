@@ -127,7 +127,6 @@ def test_utc_iso_to_local_iso_empty():
     assert bb.utc_iso_to_local_iso(None) is None
 
 
-
 # ---------- 作业拉取 ----------
 
 def iso_utc(days_from_now: int) -> str:
@@ -213,6 +212,27 @@ def test_pull_cutoff_values():
     assert bb.pull_cutoff(1, date(2024, 3, 31)) == "2024-02-29"
 
 
+def test_pull_cutoff_clamps_huge_values():
+    """超大 months 钳制到 1200（≈100 年）——不得因 date 越界抛错。"""
+    from datetime import date
+
+    expected = bb.subtract_months(date.today(), 1200).isoformat()
+    assert bb.pull_cutoff(10**6) == expected
+    assert bb.pull_cutoff("1000000") == expected
+
+
+def test_pull_cutoff_never_raises_on_weird_inputs():
+    """非法/边界输入一律不抛：0/-1 → None（不限）；其余回退 1 个月。"""
+    from datetime import date
+
+    one_month = bb.subtract_months(date.today(), 1).isoformat()
+    for bad in (None, "abc", {}, [], object(), float("nan"), float("inf")):
+        assert bb.pull_cutoff(bad) == one_month, f"非法输入 {bad!r} 应回退 1 个月"
+    assert bb.pull_cutoff(0) is None
+    assert bb.pull_cutoff(-1) is None
+    assert bb.pull_cutoff(-(10**6)) is None
+
+
 def test_network_error_carries_status():
     http = FakeSession(responses=[FakeResponse(500)])
     s = make_bb(http=http)
@@ -270,6 +290,19 @@ def test_fetch_assignments_drops_missing_due_date():
     ])
     s = make_bb(http=http)
     assert bb.fetch_assignments(s, 0) == []  # 不限窗口也丢弃
+    assert not any("/contents/" in u or u.endswith("/attempts") for u in urls_of(http))
+
+
+def test_fetch_assignments_drops_unparseable_due():
+    """due 不可解析（如 "not-a-date"）→ 与无期同路径丢弃，零后续请求。"""
+    http = FakeSession(responses=[
+        FakeResponse(200, json_data={"id": "_1_1"}),
+        FakeResponse(200, json_data={"results": [{"courseId": "_8343_1"}]}),
+        FakeResponse(200, json_data={"name": "操作系统"}),
+        FakeResponse(200, json_data=columns(due="not-a-date", content_id="_111_1")),
+    ])
+    s = make_bb(http=http)
+    assert bb.fetch_assignments(s, 1) == []
     assert not any("/contents/" in u or u.endswith("/attempts") for u in urls_of(http))
 
 
@@ -357,6 +390,35 @@ def test_fetch_assignments_keeps_on_content_network_error():
     assert len(bb.fetch_assignments(s, 1)) == 1  # 网络故障不误删
 
 
+def test_fetch_assignments_keeps_on_content_session_expired():
+    """内容探测 401×2（重登后仍 401 → SessionExpired）→ fail-open 保留。"""
+    http = FakeSession(responses=[
+        FakeResponse(200, json_data={"id": "_1_1"}),
+        FakeResponse(200, json_data={"results": [{"courseId": "_8343_1"}]}),
+        FakeResponse(200, json_data={"name": "操作系统"}),
+        FakeResponse(200, json_data=columns()),
+        FakeResponse(401),                             # content 首次
+        FakeResponse(401),                             # 重登后仍 401 → SessionExpired
+        FakeResponse(200, json_data={"results": []}),  # attempts 照常
+    ])
+    s = make_bb(http=http)
+    assert len(bb.fetch_assignments(s, 1)) == 1  # 会话问题不误删
+
+
+def test_fetch_assignments_keeps_on_content_non_json():
+    """内容 200 但非 JSON → NetworkError(status=None) → fail-open 保留。"""
+    http = FakeSession(responses=[
+        FakeResponse(200, json_data={"id": "_1_1"}),
+        FakeResponse(200, json_data={"results": [{"courseId": "_8343_1"}]}),
+        FakeResponse(200, json_data={"name": "操作系统"}),
+        FakeResponse(200, json_data=columns()),
+        FakeResponse(200, text="<html>maintenance</html>"),
+        FakeResponse(200, json_data={"results": []}),
+    ])
+    s = make_bb(http=http)
+    assert len(bb.fetch_assignments(s, 1)) == 1
+
+
 def test_fetch_assignments_skips_content_check_without_content_id():
     """无 contentId 的列保留，且不发 content 请求。"""
     http = FakeSession(responses=[
@@ -388,6 +450,20 @@ def test_fetch_assignments_tolerates_string_score():
     s = make_bb(http=http)
     records = bb.fetch_assignments(s, 1)
     assert records[0]["possible"] is None
+
+
+def test_http_request_exception_maps_to_network_error():
+    """直接单测 .get()：requests 传输异常 → NetworkError（status=None，文案保持）。"""
+
+    class RaisingHttp(FakeSession):
+        def get(self, url, **kwargs):
+            raise requests.exceptions.Timeout("timeout")
+
+    s = make_bb(http=RaisingHttp())
+    with pytest.raises(cas.NetworkError) as ei:
+        s.get("/x")
+    assert ei.value.status is None  # 传输层异常无 HTTP 状态
+    assert "Blackboard 请求失败" in str(ei.value)
 
 
 def test_fetch_assignments_skips_course_on_malformed_attempts():

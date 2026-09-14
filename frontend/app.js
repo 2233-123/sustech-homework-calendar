@@ -15,6 +15,11 @@ const api = createApi();
 const $ = (id) => document.getElementById(id);
 const PAGE_SIZE = 3;
 
+// 拉取范围白名单（与 index.html 的 option 值一致：0 = 不限）；保存与回显共用，
+// 非法值一律回退 1 个月（与后端 pull_cutoff 的默认一致）。
+const PULL_MONTHS = [1, 2, 3, 6, 0];
+const normalizePullMonths = (v) => (PULL_MONTHS.includes(Number(v)) ? Number(v) : 1);
+
 // 上报内容高度驱动窗口自适应；同时按需切换 overflowing（工作区放不下时滚动兜底）
 let lastFitH = -1;
 let lastFitAt = 0;
@@ -619,8 +624,7 @@ async function openSettings() {
     huesHydrated = true; // 幂等补读成功：同样开闸（N1；启动时读取失败后的补救路径）
     hydrateCourseHues(cfg.course_hues);
     $("s-interval").value = cfg.refresh_interval_min ?? 30;
-    const pullMonths = Number(cfg.bb_pull_months); // 0 = 不限；非法值回退默认 1
-    $("s-pull-months").value = [1, 2, 3, 6, 0].includes(pullMonths) ? String(pullMonths) : "1";
+    $("s-pull-months").value = String(normalizePullMonths(cfg.bb_pull_months)); // 0 = 不限
     $("s-bb-remind").checked = !!cfg.bb_remind_enabled;
     const defs = (Array.isArray(cfg.bb_remind_defaults) ? cfg.bb_remind_defaults : []).slice(0, 2);
     state.remindLoaded = [defs[0] ?? null, defs[1] ?? null];
@@ -676,7 +680,7 @@ async function saveSettings() {
   }
   const payload = {
     refresh_interval_min: Number($("s-interval").value) || 30,
-    bb_pull_months: Number($("s-pull-months").value) || 0, // 0 = 不限
+    bb_pull_months: normalizePullMonths($("s-pull-months").value), // 0 = 不限；非法回退 1
     bb_remind_enabled: enabled,
     bb_remind_defaults: leads,
     always_on_top: $("s-ontop").checked,

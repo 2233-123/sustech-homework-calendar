@@ -70,6 +70,37 @@ def test_sync_now_upserts_publishes_and_returns_counts(tmp_path, monkeypatch):
     assert any("sync_done" in m for m in msgs)
 
 
+def test_sync_now_passes_configured_pull_months(tmp_path, monkeypatch):
+    """接线：config.bb_pull_months → fetch_fn(session, months)。"""
+    from backend import config
+
+    seen = []
+
+    def fetch(session, months):
+        seen.append(months)
+        return []
+
+    svc, db, bus = make_service(tmp_path, monkeypatch, fetch_fn=fetch)
+    svc.login("u", "p", remember=False)
+    config.update_config({"bb_pull_months": 3})
+    svc.sync_now()
+    assert seen == [3]
+
+
+def test_sync_now_defaults_pull_months_to_one(tmp_path, monkeypatch):
+    """无配置（或非法值）→ 默认 1 个月。"""
+    seen = []
+
+    def fetch(session, months):
+        seen.append(months)
+        return []
+
+    svc, db, bus = make_service(tmp_path, monkeypatch, fetch_fn=fetch)
+    svc.login("u", "p", remember=False)
+    svc.sync_now()
+    assert seen == [1]
+
+
 def test_sync_now_offline_sets_flag_and_event(tmp_path, monkeypatch):
     def boom(session, months):
         raise NetworkError("down")
