@@ -1,10 +1,11 @@
 """Blackboard Learn 客户端：会话管理（TTL / 401 自动重登）+ REST 接口 + 作业拉取。"""
 from __future__ import annotations
 
+import calendar
 import logging
 import threading
 import time
-from datetime import datetime
+from datetime import date, datetime
 
 import requests
 
@@ -79,7 +80,9 @@ class BBSession:
         if r.status_code == 401:
             raise SessionExpired(f"会话失效且重登失败：{path}")
         if r.status_code != 200:
-            raise NetworkError(f"Blackboard 接口错误 HTTP {r.status_code}: {path}")
+            raise NetworkError(
+                f"Blackboard 接口错误 HTTP {r.status_code}: {path}", status=r.status_code
+            )
         try:
             return r.json()
         except ValueError as e:
@@ -155,12 +158,62 @@ def get_attempts(bb: "BBSession", course_id: str, column_id: str) -> list:
     return data.get("results", [])
 
 
-def fetch_assignments(bb: "BBSession") -> list:
-    """拉取所有课程作业并归一化；单课程失败不影响其它课程。"""
+def subtract_months(d: date, months: int) -> date:
+    """自然月减法（月末钳制）：2026-03-31 − 1 月 → 2026-02-28；2024-03-31 − 1 月 → 2024-02-29。"""
+    total = d.year * 12 + (d.month - 1) - months
+    year, month0 = divmod(total, 12)
+    month = month0 + 1
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, min(d.day, last_day))
+
+
+def pull_cutoff(months: int, today: date | None = None) -> str | None:
+    """拉取窗口下界（本地日期 'YYYY-MM-DD'）：今天 − months 个自然月；months<=0 → None（不限）。"""
+    try:
+        m = int(months)
+    except (TypeError, ValueError):
+        m = 1
+    if m <= 0:
+        return None
+    return subtract_months(today or date.today(), m).isoformat()
+
+
+def content_visible(bb: "BBSession", course_id: str, content_id: str) -> bool:
+    """内容可见性甄别（可用性而非班级启发式）。
+
+    403（含"别的班"内容）/ 404（已删除或不存在）→ 不可见；
+    其余（5xx / 网络错误 / 非 JSON / 401 等）→ **fail-open 保留**，避免瞬时故障误删数据。
+    """
+    try:
+        bb.get_json(f"/learn/api/public/v1/courses/{course_id}/contents/{content_id}")
+        return True
+    except NetworkError as e:
+        return e.status not in (403, 404)
+    except SessionExpired:
+        return True  # 会话问题不属于"内容不可见"，交由后续 attempts 决定
+
+
+def fetch_assignments(bb: "BBSession", pull_months: int = 1) -> list:
+    """拉取所有课程作业并归一化；单课程失败不影响其它课程。
+
+    三层过滤（全部在取 attempts 之前完成，被丢弃的列不发起 attempts/content 请求）：
+    ① 仅 Attempts 型评分列（`get_assignment_columns` 已滤，含截止时间字段）；
+    ② 无截止时间 → 丢弃（上游补 due 后下次同步会自动重新拉取）；
+    ③ 截止时间早于「今天 − pull_months 个自然月」→ 丢弃（pull_months<=0 不限）；
+    ④ 带 contentId 的列做内容可见性甄别：403/404 丢弃，其余 fail-open 保留。
+    """
+    cutoff = pull_cutoff(pull_months)
     records = []
     for course in get_courses(bb):
         try:
             for col in get_assignment_columns(bb, course["id"]):
+                due_at = utc_iso_to_local_iso(col["due_utc"])
+                if not due_at:
+                    continue  # ② 无截止时间
+                if cutoff is not None and due_at[:10] < cutoff:
+                    continue  # ③ 早于拉取窗口
+                if col["content_id"] and not content_visible(bb, course["id"], col["content_id"]):
+                    continue  # ④ 内容此刻不可见（403/404）
                 attempts = get_attempts(bb, course["id"], col["column_id"])
                 latest = max(attempts, key=lambda a: a.get("created", "")) if attempts else None
                 records.append({
@@ -168,7 +221,7 @@ def fetch_assignments(bb: "BBSession") -> list:
                     "course_name": course["name"],
                     "content_id": normalize_bb_id(col["content_id"] or col["column_id"]),
                     "title": col["title"],
-                    "due_at": utc_iso_to_local_iso(col["due_utc"]),
+                    "due_at": due_at,
                     "submitted": 1 if attempts else 0,
                     "status": (latest or {}).get("status"),
                     "score": (latest or {}).get("score"),

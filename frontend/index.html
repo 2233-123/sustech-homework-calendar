@@ -124,6 +124,15 @@
           <label class="field">同步间隔（分钟）
             <input id="s-interval" type="number" min="1" />
           </label>
+          <label class="field">拉取范围（BB 作业）
+            <select id="s-pull-months">
+              <option value="1">1 个月</option>
+              <option value="2">2 个月</option>
+              <option value="3">3 个月</option>
+              <option value="6">6 个月</option>
+              <option value="0">不限</option>
+            </select>
+          </label>
           <label class="check">
             <input id="s-bb-remind" type="checkbox" />
             开启 BB 作业截止提醒

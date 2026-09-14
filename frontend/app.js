@@ -619,6 +619,8 @@ async function openSettings() {
     huesHydrated = true; // 幂等补读成功：同样开闸（N1；启动时读取失败后的补救路径）
     hydrateCourseHues(cfg.course_hues);
     $("s-interval").value = cfg.refresh_interval_min ?? 30;
+    const pullMonths = Number(cfg.bb_pull_months); // 0 = 不限；非法值回退默认 1
+    $("s-pull-months").value = [1, 2, 3, 6, 0].includes(pullMonths) ? String(pullMonths) : "1";
     $("s-bb-remind").checked = !!cfg.bb_remind_enabled;
     const defs = (Array.isArray(cfg.bb_remind_defaults) ? cfg.bb_remind_defaults : []).slice(0, 2);
     state.remindLoaded = [defs[0] ?? null, defs[1] ?? null];
@@ -674,6 +676,7 @@ async function saveSettings() {
   }
   const payload = {
     refresh_interval_min: Number($("s-interval").value) || 30,
+    bb_pull_months: Number($("s-pull-months").value) || 0, // 0 = 不限
     bb_remind_enabled: enabled,
     bb_remind_defaults: leads,
     always_on_top: $("s-ontop").checked,

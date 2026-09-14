@@ -137,7 +137,8 @@ class Service:
         try:
             session = self._require_session()
             started = datetime.now().isoformat(timespec="seconds")
-            records = self._fetch_fn(session)
+            months = config.load_config().get("bb_pull_months", 1)  # 拉取窗口（0 = 不限）
+            records = self._fetch_fn(session, months)
             added, updated = self.db.upsert_assignments(records)
             # 顺序不可颠倒：先 upsert 再 purge——同一秒内新写入的行（synced_at >= started）不会被误删，
             # 早于本次同步的行（BB 上已删除的作业）被清理。

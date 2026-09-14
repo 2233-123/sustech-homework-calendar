@@ -32,7 +32,14 @@ class InvalidCredentials(Exception):
 
 
 class NetworkError(Exception):
-    """网络不可达（含校外 / 断网 / 服务异常）。"""
+    """网络不可达（含校外 / 断网 / 服务异常）。
+
+    `status`：HTTP 状态码（能拿到时）；message 保持原格式，旧调用方可继续按文案匹配。
+    """
+
+    def __init__(self, message: str = "", status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 def login(sid: str, password: str, session=None, timeout: int = TIMEOUT,

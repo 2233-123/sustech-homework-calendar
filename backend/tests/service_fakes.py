@@ -33,6 +33,6 @@ def make_service(tmp_path, monkeypatch, *, fetch_fn=None, session_factory=None):
         db,
         bus,
         session_factory=session_factory or FakeBBSession,
-        fetch_fn=fetch_fn or (lambda session: []),
+        fetch_fn=fetch_fn or (lambda session, months: []),
     )
     return svc, db, bus

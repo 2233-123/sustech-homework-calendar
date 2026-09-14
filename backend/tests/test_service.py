@@ -39,7 +39,7 @@ def test_login_invalid_credentials_sets_failed(tmp_path, monkeypatch):
 def test_silent_login_uses_saved_credentials(tmp_path, monkeypatch):
     svc, db, bus = make_service(tmp_path, monkeypatch)
     svc.save_credentials("u", "p")
-    svc2 = Service(db, bus, session_factory=FakeBBSession, fetch_fn=lambda s: [])
+    svc2 = Service(db, bus, session_factory=FakeBBSession, fetch_fn=lambda s, months: [])
     assert svc2.try_silent_login() is True
     assert svc2.login_state == LOGIN_OK
 
@@ -55,7 +55,7 @@ def test_sync_now_upserts_publishes_and_returns_counts(tmp_path, monkeypatch):
         "course_id": "1", "course_name": "OS", "content_id": "2", "title": "实验1",
         "due_at": "2026-09-20T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 100,
     }]
-    svc, db, bus = make_service(tmp_path, monkeypatch, fetch_fn=lambda session: records)
+    svc, db, bus = make_service(tmp_path, monkeypatch, fetch_fn=lambda session, months: records)
     svc.login("u", "p", remember=False)
     q = bus.subscribe()
     result = svc.sync_now()
@@ -71,7 +71,7 @@ def test_sync_now_upserts_publishes_and_returns_counts(tmp_path, monkeypatch):
 
 
 def test_sync_now_offline_sets_flag_and_event(tmp_path, monkeypatch):
-    def boom(session):
+    def boom(session, months):
         raise NetworkError("down")
 
     svc, db, bus = make_service(tmp_path, monkeypatch, fetch_fn=boom)
@@ -142,7 +142,7 @@ def test_silent_login_session_expired_resets_to_need_login(tmp_path, monkeypatch
 
 
 def test_sync_session_expired_requires_relogin(tmp_path, monkeypatch):
-    def boom(session):
+    def boom(session, months):
         raise SessionExpired("dead")
 
     svc, db, bus = make_service(tmp_path, monkeypatch, fetch_fn=boom)
@@ -155,7 +155,7 @@ def test_sync_session_expired_requires_relogin(tmp_path, monkeypatch):
 
 
 def test_sync_invalid_credentials_marks_failed(tmp_path, monkeypatch):
-    def boom(session):
+    def boom(session, months):
         raise InvalidCredentials("bad")
 
     svc, db, bus = make_service(tmp_path, monkeypatch, fetch_fn=boom)
@@ -172,7 +172,7 @@ def test_sync_now_empty_fetch_keeps_cache(tmp_path, monkeypatch):
     }]
     calls = {"n": 0}
 
-    def fetch(session):
+    def fetch(session, months):
         calls["n"] += 1
         return records if calls["n"] == 1 else []
 

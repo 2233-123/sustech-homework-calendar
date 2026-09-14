@@ -25,6 +25,8 @@ DEFAULT_CONFIG = {
     "refresh_interval_min": 30,
     "bb_remind_defaults": [1440, 120],
     "bb_remind_enabled": True,
+    # BB 拉取窗口：只拉「不早于 今天 − N 个自然月」的条目；0 = 不限。
+    "bb_pull_months": 1,
     "remind_popup": "inapp",
     "always_on_top": True,
     "opacity": 0.95,

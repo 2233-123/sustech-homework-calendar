@@ -91,7 +91,7 @@ def test_sync_endpoint_auth_and_result(tmp_path, monkeypatch):
         "course_id": "1", "course_name": "OS", "content_id": "2", "title": "实验1",
         "due_at": "2026-09-20T23:59:00", "submitted": 0, "status": None, "score": None, "possible": 100,
     }]
-    client, svc, db, bus = make_client(tmp_path, monkeypatch, fetch_fn=lambda s: records)
+    client, svc, db, bus = make_client(tmp_path, monkeypatch, fetch_fn=lambda s, months: records)
     rv = client.post("/api/sync")
     assert rv.status_code == 401
     assert rv.get_json()["error"] == "not_authenticated"

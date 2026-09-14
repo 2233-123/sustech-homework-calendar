@@ -11,7 +11,7 @@ SQLite 存储、配置读写与提醒判定；仅监听 `127.0.0.1` 随机端口
 | `app.py` | 路由与请求体校验（`/api/*`），把请求转交 service/config |
 | `service.py` | 业务编排：登录态、同步、缓存、提醒调度与状态快照 |
 | `cas.py` | CAS 登录客户端（表单提交、重定向、cookie） |
-| `bb.py` | Blackboard 会话与作业抓取（TTL / 401 重登） |
+| `bb.py` | Blackboard 会话与作业抓取（TTL / 401 重登；拉取窗口 + 内容可见性过滤：403/404 丢弃、故障 fail-open） |
 | `db.py` | SQLite 访问（日程、作业缓存） |
 | `config.py` | 配置读写：默认值合并、键过滤、原子写 + RLock 串行化 |
 | `dpapi.py` | 凭据加解密（Windows DPAPI，仅当前用户可解密） |
@@ -29,7 +29,7 @@ SQLite 存储、配置读写与提醒判定；仅监听 `127.0.0.1` 随机端口
 
 ```powershell
 .\.venv\Scripts\python -m backend.main     # 打印 PORT=，浏览器访问即前端
-.\.venv\Scripts\python -m pytest           # 133 用例
+.\.venv\Scripts\python -m pytest           # 149 用例
 ```
 
 ## 修改注意点
