@@ -274,8 +274,12 @@ const WIN_SC = 1.32;                          // 舞台上缩放
 const WIN_CX = 960, WIN_CY = 540;             // 窗口中心（舞台坐标，标称高度时）
 const CEL = { x0: 10, y0: 113, size: (408 - 20 - 6 * 3) / 7, gap: 3, r: 12 };
 const ROW1_Y = 431, ROW_H = 66;               // 日列表 page1 行
-const ROW_DIFF = 99;                          // page1(3×BB=198) − page2(自建33+BB66=99)：自适应高度差
-const WIN_TOP = WIN_CY - (WIN_H / 2) * WIN_SC; // 窗口顶边（高度变化时底边随之收起）
+const ROW_DIFF = 99;                          // page1(3×BB=198) − page2(自建33+BB66=99)：列表内容差
+// 翻到第 2 页（行数更少）时列表自然变短 99px；分页器在应用里紧随列表，故上移量 = 内容差 − 1 个常规行高
+// = 99 − 33 = 66px（少「一行」），BB 行与其下方分页器的间距保持不变。
+// 窗口高度恒定：裁剪矩形（0..WIN_H）与静止位置都按标称高度算，收紧窗口会连带把分页器裁掉。
+const ROW_SHIFT_P2 = 66;
+const WIN_TOP = WIN_CY - (WIN_H / 2) * WIN_SC; // 窗口顶边（不随列表页变化）
 
 /* ---------- 引用表 ---------- */
 const R = {};
@@ -465,13 +469,11 @@ function windowUpdate(t) {
   // 贴边收起 / 唤回（22.5–23.9）
   const hideP = EIO(S(22.5, 23.05, t)) * (1 - EIO(S(23.35, 23.9, t)));
   const wx = 1450 * hideP;
-  // 翻到第 2 页（行数更少）时窗口高度自适应：底边上收（顶边固定，对齐应用真实行为）
-  const hp2 = EIO(S(12.35, 13.05, t));
-  const H = WIN_H - ROW_DIFF * hp2;
+  // 窗口高度恒定（列表分页的位移见 s3Update，避免裁剪矩形把分页器切掉）
+  const H = WIN_H;
   R.winCard.setAttribute("height", H.toFixed(1));
   q("winClipA").firstElementChild.setAttribute("height", H.toFixed(1));
   R.winInner.setAttribute("transform", `translate(-204 ${(-H / 2).toFixed(1)})`);
-  R.dayPager.setAttribute("transform", `translate(0 ${(-ROW_DIFF * hp2).toFixed(1)})`);
   const wcy = WIN_TOP + (H / 2) * WIN_SC + wy;
   const fadeOut = 1 - S(24.5, 25.1, t);
   const wop = S(3.6, 4.1, t) * demoOp * fadeOut;
@@ -546,13 +548,14 @@ function s3Update(t) {
   q("annoB").setAttribute("y1", yBot); q("annoB").setAttribute("y2", yBot);
   q("annoV").setAttribute("y1", yTop); q("annoV").setAttribute("y2", yBot);
   q("annoBTick").setAttribute("y1", yBot); q("annoBTick").setAttribute("y2", yBot);
-  // 翻页：12.35 第 1 页退出（与窗口收高同步），12.65 第 2 页滑入
+  // 翻页：12.35 第 1 页退出，12.65 第 2 页滑入；分页器与第 2 页列表同步上移（紧随列表，不被窗口裁掉）
   const p1out = EI(S(12.35, 12.7, t));
   const p2in = EO(S(12.65, 13.2, t));
   R.dlp1.setAttribute("opacity", String(1 - p1out));
   R.dlp1.setAttribute("transform", `translate(0 ${(-14 * p1out).toFixed(2)})`);
   R.dlp2.setAttribute("opacity", String(p2in));
   R.dlp2.setAttribute("transform", `translate(0 ${(14 * (1 - p2in)).toFixed(2)})`);
+  R.dayPager.setAttribute("transform", `translate(0 ${(-ROW_SHIFT_P2 * EIO(S(12.35, 13.05, t))).toFixed(2)})`);
   const pfDot = S(12.5, 12.65, t);
   R.pd0.setAttribute("fill", pfDot > 0.5 ? "rgba(31,41,55,0.28)" : "#2563eb");
   R.pd1.setAttribute("fill", pfDot > 0.5 ? "#2563eb" : "rgba(31,41,55,0.28)");
