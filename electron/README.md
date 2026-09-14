@@ -12,7 +12,7 @@
 | `build/installer.nsh` | NSIS 自定义安装页（快捷方式选项） |
 | `resources/backend/` | 打包用 `backend.exe`（PyInstaller 产物，构建生成） |
 | `dist/` | 安装包/便携版输出（构建产物） |
-| `icon.png` / `tray.png` | 应用与托盘图标；`make-tray-icon.js` 生成托盘图 |
+| `icon.png` / `tray.png` | 应用图标（1024，白底毛玻璃+日历，`make-icon.js` 用 headless Chromium 渲染）与托盘图（`make-tray-icon.js` 纯 Node 生成） |
 | `package.json` | electron-builder 配置与依赖 |
 
 ## 约定

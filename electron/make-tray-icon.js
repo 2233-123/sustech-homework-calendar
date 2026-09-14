@@ -1,5 +1,5 @@
-// 生成 electron/tray.png (32×32) 与 electron/icon.png (256×256)
-// 纯 Node 内置模块手写 PNG（无第三方依赖）。
+// 生成 electron/tray.png (32×32)。纯 Node 内置模块手写 PNG（无第三方依赖）。
+// 注意：应用图标 icon.png（1024×1024，白底毛玻璃+日历）由 make-icon.js 生成，本脚本不再覆盖它。
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
@@ -66,5 +66,4 @@ function makePng(size) {
 }
 
 fs.writeFileSync(path.join(__dirname, "tray.png"), makePng(32));
-fs.writeFileSync(path.join(__dirname, "icon.png"), makePng(256));
-console.log("written tray.png (32) and icon.png (256)");
+console.log("written tray.png (32)");
